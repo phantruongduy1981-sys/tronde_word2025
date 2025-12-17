@@ -5,107 +5,134 @@ import zipfile
 import io
 from xml.dom import minidom
 
-# ==================== CẤU HÌNH TRANG ====================
+# ==================== CẤU HÌNH TRANG (ĐÃ CHỈNH SANG WIDE) ====================
 
 st.set_page_config(
     page_title="Trộn Đề Word - THPT Minh Đức",
     page_icon="🏫",
-    layout="centered",
+    layout="wide",  # <--- THAY ĐỔI QUAN TRỌNG: Sử dụng toàn bộ chiều ngang
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS - Đã chỉnh sửa giao diện theo yêu cầu mới
+# Custom CSS - PHIÊN BẢN BIG SIZE CHO MÀN HÌNH RỘNG
 st.markdown("""
 <style>
-    /* 1. Tùy chỉnh khung chứa tiêu đề (Header Card) */
+    /* 1. Cấu hình chung cho layout Wide */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 95% !important; /* Sử dụng 95% chiều ngang màn hình */
+    }
+
+    /* 2. Header Card - Phóng to cực đại */
     .header-card {
-        background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%); /* Màu trắng chuyển sang xanh nhạt bóng */
+        background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%);
         border: 2px solid #brent;
-        border-radius: 20px; /* Bo tròn */
-        padding: 15px 10px;
+        border-radius: 20px;
+        padding: 30px 20px; /* Tăng padding */
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Đổ bóng nhẹ */
-        margin-bottom: 10px;
+        box-shadow: 0 6px 10px rgba(0,0,0,0.1);
+        margin-bottom: 25px;
     }
     
-    /* Dòng 1: Tên trường - Tăng 50% kích thước */
     .header-card h1 {
         color: #d93025; 
-        font-size: 2.7rem !important; /* Tăng kích thước lớn */
+        font-size: 4rem !important; /* Tăng size chữ tên trường cực lớn */
         font-weight: 900;
         text-transform: uppercase;
         margin: 0 !important;
-        padding: 0 !important;
         line-height: 1.2;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.15);
     }
     
-    /* Dòng 2: Tên ứng dụng - Kít lại với dòng 1 */
     .header-card h2 {
         color: #0d9488;
-        font-size: 1.5rem !important;
+        font-size: 2.2rem !important; /* Tăng size tên ứng dụng */
         font-weight: bold;
-        margin: 5px 0 0 0 !important; /* Cách dòng trên chỉ 5px */
-        padding: 0 !important;
+        margin: 10px 0 0 0 !important;
     }
 
-    /* 2. Tùy chỉnh vùng Hướng dẫn (Instruction Box) */
+    /* 3. Vùng Hướng dẫn - Chữ to dễ đọc */
     .instruction-container {
-        background-color: #f8fafc; /* Màu nền xám xanh nhẹ */
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 15px;
-        margin-top: 0px;
-        font-size: 0.95rem;
+        background-color: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 15px;
+        padding: 25px;
+        font-size: 1.25rem !important; /* Chữ hướng dẫn to hơn (20px) */
+        line-height: 1.6;
     }
     .instruction-container strong {
         color: #0369a1;
+        font-weight: 700;
+    }
+    .instruction-container li {
+        margin-bottom: 8px;
     }
 
-    /* 3. Làm các thẻ kít lại (Giảm khoảng cách toàn trang) */
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 1rem !important;
-    }
-    div[data-testid="stVerticalBlock"] > div {
-        gap: 0.5rem !important; /* Khoảng cách giữa các element chỉ còn 0.5rem */
+    /* 4. Tăng kích thước các thành phần Input (Radio, Number, File Uploader) */
+    
+    /* Chữ nhãn (Label) của các ô nhập liệu */
+    .stMarkdown p, .stRadio label, .stNumberInput label, .stFileUploader label {
+        font-size: 1.3rem !important; /* Tăng size nhãn */
+        font-weight: 600;
     }
     
-    /* Style cho nút bấm đẹp hơn */
+    /* Text bên trong Radio button */
+    .stRadio div[role="radiogroup"] label p {
+        font-size: 1.2rem !important;
+    }
+
+    /* Ô nhập số (Number Input) to hơn */
+    div[data-baseweb="input"] {
+        height: 3rem; /* Cao hơn */
+        border-radius: 10px;
+    }
+    div[data-baseweb="input"] input {
+        font-size: 1.2rem !important; /* Số bên trong to hơn */
+        text-align: center;
+    }
+
+    /* 5. Nút bấm (Button) - To và nổi bật */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
         color: white;
         border: none;
-        padding: 0.6rem 1.5rem;
-        font-size: 1.1rem;
-        font-weight: bold;
-        border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        padding: 1rem 2rem; /* Nút dày hơn */
+        font-size: 1.5rem !important; /* Chữ trong nút to */
+        font-weight: 800;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(13, 148, 136, 0.3);
+        text-transform: uppercase;
+        margin-top: 10px;
     }
     .stButton > button:hover {
         background: linear-gradient(90deg, #0f766e, #0d9488);
-        transform: translateY(-1px);
+        transform: scale(1.01);
+    }
+    
+    /* Thông báo lỗi/thành công to hơn */
+    .stAlert {
+        font-size: 1.1rem !important;
     }
 
     /* Footer */
     .footer {
         text-align: center;
-        color: #666;
-        padding: 1rem 0;
-        border-top: 1px dashed #ccc;
-        margin-top: 1rem;
-        font-size: 0.85rem;
+        color: #64748b;
+        padding: 2rem 0;
+        border-top: 2px dashed #cbd5e1;
+        margin-top: 3rem;
+        font-size: 1.1rem; /* Footer to hơn */
     }
-    
-    /* Ẩn bớt khoảng trắng mặc định của Streamlit */
-    hr {
-        margin: 0.5em 0 !important;
+    .footer strong {
+        color: #0d9488;
+        font-size: 1.2rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC TRỘN ĐỀ (GIỮ NGUYÊN ĐẦY ĐỦ) ====================
+# ==================== LOGIC TRỘN ĐỀ (GIỮ NGUYÊN 100%) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -597,10 +624,10 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
     return zip_buffer.getvalue()
 
 
-# ==================== GIAO DIỆN STREAMLIT ====================
+# ==================== GIAO DIỆN STREAMLIT (FULL WIDTH) ====================
 
 def main():
-    # Header MỚI - Thẻ bóng, bo tròn, tiêu đề lớn
+    # Header MỚI - FULL WIDTH & BIG SIZE
     st.markdown("""
     <div class="header-card">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
@@ -608,7 +635,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Hướng dẫn MỚI - Có nền màu
+    # Hướng dẫn - BIG TEXT
     with st.expander("📋 Hướng dẫn & Cấu trúc file (Nhấn để xem)", expanded=False):
         st.markdown("""
         <div class="instruction-container">
@@ -626,48 +653,59 @@ def main():
                 <li><strong>Đáp án Phần 1 & 2:</strong> Gạch chân hoặc tô màu đáp án đúng.</li>
                 <li><strong>Đáp án Phần 3:</strong> Ghi đáp án/lời giải ngay sau câu hỏi. Có thể tô màu/gạch chân để làm nổi bật.</li>
             </ul>
-            <p style="margin-top: 10px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
+            <p style="margin-top: 15px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
         </div>
         """, unsafe_allow_html=True)
     
-    # 1. Upload file
-    uploaded_file = st.file_uploader("1️⃣ Chọn file đề Word (.docx)", type=["docx"])
+    st.write("") # Spacer
+
+    # 1. Upload file (Dùng cột để căn chỉnh nếu cần, nhưng ở wide mode để mặc định cũng tốt)
+    st.subheader("1️⃣ Chọn file đề Word (.docx)")
+    uploaded_file = st.file_uploader("", type=["docx"])
     
     if uploaded_file:
         st.success(f"✅ Đã chọn: **{uploaded_file.name}**")
     
-    # 2. Kiểu trộn
-    shuffle_mode = st.radio(
-        "2️⃣ Kiểu trộn:",
-        options=["auto", "mcq", "tf"],
-        format_func=lambda x: {
-            "auto": "🔄 Tự động (Theo Phần)",
-            "mcq": "📝 Trắc nghiệm (Toàn bộ)",
-            "tf": "✅ Đúng/Sai (Toàn bộ)"
-        }[x],
-        horizontal=True,
-        index=0
-    )
+    st.divider()
     
-    # 3. Số mã đề
-    col1, col2 = st.columns(2)
-    with col1:
-        num_versions = st.number_input("3️⃣ Số lượng đề:", min_value=1, max_value=50, value=4)
-    with col2:
-        start_code = st.number_input("#️⃣ Mã bắt đầu:", min_value=0, value=101)
+    # 2. Cấu hình (Chia cột cho thoáng)
+    col_left, col_right = st.columns([1, 1], gap="large")
     
-    if num_versions > 1:
-        st.caption(f"📦 Tạo {num_versions} đề từ mã {start_code} đến {start_code + num_versions - 1}")
-    else:
-        st.caption(f"📄 Tạo 1 đề mã {start_code}")
+    with col_left:
+        st.subheader("2️⃣ Kiểu trộn")
+        shuffle_mode = st.radio(
+            "Chọn chế độ:",
+            options=["auto", "mcq", "tf"],
+            format_func=lambda x: {
+                "auto": "🔄 Tự động (Theo từng Phần)",
+                "mcq": "📝 Trắc nghiệm (Toàn bộ)",
+                "tf": "✅ Đúng/Sai (Toàn bộ)"
+            }[x],
+            index=0
+        )
 
-    # 4. Nút trộn đề (Dùng CSS để tạo khoảng cách kít lại nên không dùng divider)
-    if st.button("🎲 TRỘN ĐỀ NGAY", type="primary", use_container_width=True):
+    with col_right:
+        st.subheader("3️⃣ Cấu hình mã đề")
+        c1, c2 = st.columns(2)
+        with c1:
+            num_versions = st.number_input("Số lượng đề:", min_value=1, max_value=50, value=4)
+        with c2:
+            start_code = st.number_input("Mã bắt đầu:", min_value=0, value=101)
+        
+        if num_versions > 1:
+            st.info(f"📦 Tạo {num_versions} đề: Từ mã {start_code} ➝ {start_code + num_versions - 1}")
+        else:
+            st.info(f"📄 Tạo 1 đề: Mã {start_code}")
+
+    st.write("") # Spacer
+
+    # 4. Nút trộn đề - TO VÀ RÕ
+    if st.button("🎲 BẮT ĐẦU TRỘN ĐỀ", type="primary", use_container_width=True):
         if not uploaded_file:
-            st.error("⚠️ Chưa chọn file!")
+            st.warning("⚠️ Vui lòng chọn file Word trước khi trộn!")
         else:
             try:
-                with st.spinner("🚀 Đang xử lý..."):
+                with st.spinner("🚀 Đang xử lý dữ liệu..."):
                     file_bytes = uploaded_file.read()
                     base_name = re.sub(r'[^\w\s-]', '', uploaded_file.name.replace(".docx", "")).strip() or "De"
                     
@@ -680,8 +718,9 @@ def main():
                         filename = f"{base_name}_From_{start_code}.zip"
                         mime = "application/zip"
                 
-                st.markdown(f"""<div class="success-box" style="background:#ecfdf5;padding:10px;border-radius:10px;text-align:center;margin-bottom:10px;"><h3>✅ Thành công!</h3></div>""", unsafe_allow_html=True)
-                st.download_button(label=f"📥 Tải xuống {filename}", data=result, file_name=filename, mime=mime, use_container_width=True)
+                st.balloons() # Hiệu ứng chúc mừng
+                st.success("✅ TRỘN ĐỀ THÀNH CÔNG! BẤM NÚT DƯỚI ĐỂ TẢI.")
+                st.download_button(label=f"📥 TẢI XUỐNG {filename}", data=result, file_name=filename, mime=mime, use_container_width=True)
                 
             except Exception as e:
                 st.error(f"❌ Lỗi: {str(e)}")
@@ -689,7 +728,8 @@ def main():
     # Footer
     st.markdown("""
     <div class="footer">
-        <p><strong>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</strong><br>Zalo hỗ trợ: <strong>038994070</strong></p>
+        <p><strong>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</strong></p>
+        <p>Zalo hỗ trợ kỹ thuật: <strong>038994070</strong></p>
     </div>
     """, unsafe_allow_html=True)
 
