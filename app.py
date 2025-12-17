@@ -47,7 +47,7 @@ def get_full_text_from_paragraph(paragraph):
     return "".join(texts)
 
 def check_is_marked_answer(block):
-    """Kiểm tra dấu hiệu đáp án (Gạch chân, Màu sắc, Highlight)"""
+    """Kiểm tra dấu hiệu đáp án"""
     runs = block.getElementsByTagNameNS(W_NS, "r")
     for r in runs:
         rPr_list = r.getElementsByTagNameNS(W_NS, "rPr")
@@ -84,7 +84,7 @@ def remove_answer_formatting(block):
                 rPr.removeChild(node)
 
 def clean_short_answer_content(block):
-    """Xử lý phần 3: Lấy đáp án và Xóa text 'ĐS:...' một cách an toàn"""
+    """Xử lý phần 3: Lấy đáp án và Xóa text 'ĐS:...' an toàn"""
     runs = block.getElementsByTagNameNS(W_NS, "r")
     full_text = get_full_text_from_paragraph(block)
     
@@ -98,10 +98,12 @@ def clean_short_answer_content(block):
             for t in t_nodes:
                 if t.firstChild and t.firstChild.nodeValue:
                     val = t.firstChild.nodeValue
+                    # Chỉ xóa đúng phần ĐS, giữ nguyên khoảng trắng nếu có
                     if re.search(r'(ĐS|Đáp số|DS)', val, re.IGNORECASE):
                         m_part = re.search(r'(.*?)(ĐS|Đáp số|DS)', val, re.IGNORECASE)
                         if m_part:
                             t.firstChild.nodeValue = m_part.group(1)
+                            # QUAN TRỌNG: Giữ space
                             t.setAttribute("xml:space", "preserve") 
     return found_answer
 
@@ -126,7 +128,7 @@ def style_run_blue_bold(run):
 
 def update_label_smart(paragraph, regex_pattern, new_label_text):
     """
-    CẬP NHẬT LABEL THÔNG MINH (FIX LỖI DÍNH CHỮ)
+    CẬP NHẬT LABEL THÔNG MINH (FIX DÍNH CHỮ & FIX 'B..')
     """
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     if not t_nodes: return False
@@ -138,34 +140,42 @@ def update_label_smart(paragraph, regex_pattern, new_label_text):
         
         m = re.match(regex_pattern, txt, re.IGNORECASE)
         if m:
-            # Giữ lại khoảng trắng đầu dòng (nếu có)
+            # Lấy phần text gốc khớp với regex
             original_match = m.group(0)
-            leading_space = m.group(1) if m.lastindex and m.lastindex >= 1 else ""
             
-            # Cắt bỏ phần label cũ, ghép label mới vào
+            # Tính toán phần dư (text phía sau nhãn)
             remaining_text = txt[len(original_match):]
             
-            # Label mới = (Khoảng trắng cũ) + (Label mới từ code) + (Text còn lại)
-            # new_label_text từ hàm gọi đã bao gồm dấu chấm (VD: "A.")
-            t.firstChild.nodeValue = leading_space + new_label_text + remaining_text
+            # Nếu regex không bắt được khoảng trắng sau dấu chấm, ta phải tự thêm vào nếu bản gốc có
+            # Tuy nhiên, để an toàn nhất: Ta thay thế chính xác cụm tìm được.
+            # Ví dụ: Tìm thấy "A. " -> Thay bằng "B. "
             
-            # QUAN TRỌNG: Giữ nguyên khoảng cách
+            # Logic mới: new_label_text truyền vào là "B." (chưa có space).
+            # Ta cần kiểm tra xem original_match có space cuối không.
+            trailing_space = ""
+            if original_match and original_match[-1] == " ":
+                trailing_space = " "
+            
+            # Cập nhật giá trị: Label Mới + Space cũ (nếu có) + Phần dư
+            t.firstChild.nodeValue = new_label_text + trailing_space + remaining_text
+            
+            # === KHẮC PHỤC DÍNH CHỮ: BẮT BUỘC THÊM xml:space="preserve" ===
             t.setAttribute("xml:space", "preserve")
             
             run = t.parentNode
             if run and run.localName == "r": style_run_blue_bold(run)
             
-            # Xóa các node rác (dấu chấm/ngoặc thừa) NHƯNG KHÔNG XÓA KHOẢNG TRẮNG
+            # Dọn dẹp các node rác ngay sau (dấu chấm/ngoặc thừa do Word tách run)
             for j in range(i + 1, len(t_nodes)):
                 t2 = t_nodes[j]
                 if t2.firstChild and t2.firstChild.nodeValue:
                     val = t2.firstChild.nodeValue
-                    # FIX LỖI DÍNH CHỮ: Chỉ xóa nếu là dấu chấm hoặc ngoặc. 
-                    # Nếu chứa khoảng trắng (\s), TUYỆT ĐỐI KHÔNG XÓA.
+                    # Chỉ xóa nếu node đó CHỈ CHỨA dấu chấm hoặc ngoặc (rác).
+                    # TUYỆT ĐỐI KHÔNG XÓA nếu có khoảng trắng (\s)
                     if re.match(r'^[\.\)]+$', val): 
                         t2.firstChild.nodeValue = ""
                     else:
-                        break # Gặp chữ hoặc khoảng trắng thì dừng ngay
+                        break 
             found = True
             break
     return found
@@ -184,13 +194,17 @@ def process_mcq_question(question_blocks):
     others = []
     option_indices = []
     
-    # Regex lỏng hơn để bắt được "A.", "A .", "A)"
-    # Regex: (Space)(A-D)(Space)(Dot or Paren or Empty)
-    label_regex = r'^\s*[A-D]\s*[\.\)]?'
+    # === FIX LỖI NHẬN DIỆN "CÂU" THÀNH "C." ===
+    # Regex cũ: r'^\s*[A-D][\.\)]?' (Dấu chấm tùy chọn -> Sai lầm tai hại)
+    # Regex mới: Bắt buộc có dấu chấm hoặc ngoặc. 
+    # Lookahead (?!Câu) để đảm bảo không bắt chữ "Câu" (bắt đầu bằng C)
+    
+    label_regex = r'^\s*(?!Câu)(?:[A-D]|[a-d])[\.\)]' 
     
     for i, block in enumerate(question_blocks):
         txt = get_full_text_from_paragraph(block)
-        if re.match(label_regex, txt, re.IGNORECASE):
+        # Kiểm tra kỹ: Phải khớp regex VÀ không được bắt đầu bằng chữ "Câu"
+        if re.match(label_regex, txt, re.IGNORECASE) and not txt.strip().lower().startswith("câu"):
             options.append(block)
             option_indices.append(i)
         else:
@@ -221,9 +235,8 @@ def process_mcq_question(question_blocks):
             
     for idx, block in enumerate(shuffled_blocks):
         lbl = chars[idx] if idx < 4 else chars[-1]
-        # Regex update phải khớp với Regex nhận diện
-        # Group 1: Leading space. Group 2: Label char. Group 3: Space/Punct
-        update_label_smart(block, r'^(\s*)([A-D])(\s*[\.\)])?', f"{lbl}.")
+        # Regex update cũng phải khớp chính xác để không sửa nhầm
+        update_label_smart(block, label_regex, f"{lbl}.")
         
     min_idx, max_idx = min(option_indices), max(option_indices)
     final_blocks = question_blocks[:min_idx] + shuffled_blocks + question_blocks[max_idx+1:]
@@ -231,7 +244,8 @@ def process_mcq_question(question_blocks):
 
 def process_tf_question(question_blocks):
     opt_map = {}
-    label_regex = r'^\s*([a-d])\s*[\.\)]'
+    # Bắt buộc có dấu chấm hoặc ngoặc )
+    label_regex = r'^\s*([a-d])[\.\)]'
     
     for i, block in enumerate(question_blocks):
         txt = get_full_text_from_paragraph(block)
@@ -260,7 +274,7 @@ def process_tf_question(question_blocks):
     for idx, item in enumerate(final_order):
         ans_parts.append("D" if item['val'] else "S")
         lbl = labels[idx]
-        update_label_smart(item['block'], r'^(\s*)([a-d])(\s*[\.\)])?', f"{lbl})")
+        update_label_smart(item['block'], label_regex, f"{lbl})")
         
     final_ans_str = "-".join(ans_parts)
     indices = [opt_map[k][1] for k in opt_map]
@@ -284,7 +298,7 @@ def parse_questions_in_range(blocks, start, end):
     intro = []
     questions = []
     i = 0
-    # Regex nhận diện câu hỏi: Chấp nhận "Câu 1.", "Câu 1:", "Câu 1"
+    # Regex nhận diện câu hỏi: Bắt buộc có số
     q_regex = r'^Câu\s*\d+'
     
     while i < len(part_blocks):
@@ -343,7 +357,7 @@ def process_full_docx(file_bytes, code_name):
         
         for idx, (q_blks, ans) in enumerate(shuffled_qs_with_ans):
             if q_blks:
-                # Update "Câu X" (Group 1: space, Group 2: Câu, Group 3: number)
+                # Update "Câu X" - Cũng dùng hàm smart để giữ format
                 update_label_smart(q_blks[0], r'^(\s*)(Câu\s*)(\d+)(\s*[\.:])?', f"Câu {idx+1}.")
             final_part_blocks.extend(q_blks)
             exam_answers[f"P{part_type}"][idx+1] = ans
@@ -491,7 +505,7 @@ def main():
                 st.error("Chưa chọn file!")
             else:
                 try:
-                    with st.spinner("Đang xử lý (Fix lỗi dính chữ)..."):
+                    with st.spinner("Đang xử lý (Fix dính chữ & Nhận diện Câu)..."):
                         original_bytes = uploaded_file.read()
                         uploaded_file.seek(0)
                         base_name = uploaded_file.name.replace(".docx", "")
