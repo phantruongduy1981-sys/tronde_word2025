@@ -1,1 +1,6 @@
-streamlit>=1.28.0
+streamlit
+pandas
+xlsxwriter
+openpyxl
+lxml
+python-docx
