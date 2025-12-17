@@ -12,42 +12,65 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 
 # ==================== CẤU HÌNH TRANG & CSS ====================
 st.set_page_config(
-    page_title="Trộn Đề Word - THPT Minh Đức",
+    page_title="Trộn Đề THPT Minh Đức",
     page_icon="🏫",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# MÀU SẮC GIAO DIỆN PRO
+# MÀU SẮC GIAO DIỆN
 HEADER_COLOR = "#00695c"
-BUTTON_COLOR = "#d32f2f"  # Đỏ đậm
+BUTTON_COLOR = "#d32f2f"
 BG_INFO = "#e8f5e9"
 BG_WARNING = "#fffde7"
+CARD_BG = "#f1f8e9" 
 
 st.markdown(f"""
 <style>
+    /* 1. Header thu gọn (60% chiều cao cũ) */
     .main-header {{
         background-color: {HEADER_COLOR};
         color: white;
-        padding: 25px;
+        padding: 15px; 
         text-align: center;
-        border-radius: 10px;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }}
     .main-header h1 {{
-        font-size: 28px;
+        font-size: 22px; 
         font-weight: 800;
         margin: 0;
         text-transform: uppercase;
         color: white;
         letter-spacing: 1px;
     }}
-    .main-header p {{ margin-top: 8px; font-size: 14px; opacity: 0.9; font-weight: 500; }}
+    .main-header p {{ 
+        margin-top: 5px; 
+        font-size: 13px; 
+        opacity: 0.9; 
+        font-weight: 500; 
+    }}
     
+    /* 2. Style cho thẻ Cấu hình (Input card) */
+    .config-card {{
+        background-color: {CARD_BG};
+        border: 1px solid #c5e1a5;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        margin-bottom: 10px;
+    }}
+    .config-label {{
+        color: {HEADER_COLOR};
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 5px;
+        display: block;
+    }}
+
     .info-box {{ background-color: {BG_INFO}; border-left: 5px solid #66bb6a; padding: 15px; border-radius: 5px; margin-bottom: 15px; }}
     .info-header {{ font-weight: bold; color: #2e7d32; font-size: 16px; margin-bottom: 10px; }}
-    
     .warning-box {{ background-color: {BG_WARNING}; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 5px; margin-top: 15px; }}
     .warning-header {{ font-weight: bold; color: #f57f17; margin-bottom: 8px; }}
 
@@ -116,6 +139,7 @@ def clean_formatting(paragraph):
         for u in rPr.getElementsByTagNameNS(W_NS, "u"): rPr.removeChild(u)
 
 def update_label_in_node(paragraph, new_label):
+    """Cập nhật nhãn (Câu 1., A., a))."""
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     if not t_nodes: return
     first_node = None
@@ -123,13 +147,20 @@ def update_label_in_node(paragraph, new_label):
         if t.firstChild and t.firstChild.nodeValue.strip():
             first_node = t; break
     if not first_node: return
+    
     txt = first_node.firstChild.nodeValue
+    
+    # 1. Xử lý A. B. C. D.
     if re.match(r'^\s*[A-D][\.:\)]', txt, re.IGNORECASE):
         sub = re.sub(r'^\s*[A-D][\.:\)]', new_label, txt, count=1)
         first_node.firstChild.nodeValue = sub
+        
+    # 2. Xử lý a) b) c) d)
     elif re.match(r'^\s*[a-d][\.:\)]', txt, re.IGNORECASE):
         sub = re.sub(r'^\s*[a-d][\.:\)]', new_label, txt, count=1)
         first_node.firstChild.nodeValue = sub
+        
+    # 3. Xử lý Câu X (Thay thành Câu X. theo yêu cầu)
     elif re.match(r'^\s*Câu\s*\d+', txt, re.IGNORECASE):
         sub = re.sub(r'^\s*Câu\s*\d+[\.:]?', new_label, txt, count=1, flags=re.IGNORECASE)
         first_node.firstChild.nodeValue = sub
@@ -159,13 +190,18 @@ def shuffle_questions(questions, mode="MCQ"):
     
     for new_idx, old_idx in enumerate(indices):
         q_blocks = questions[old_idx] 
+        
+        # --- PHẦN 3 ---
         if mode == "FILL":
             cleaned_blocks, ans_text = extract_part3_answer(q_blocks)
-            if cleaned_blocks: update_label_in_node(cleaned_blocks[0], f"Câu {new_idx + 1}.")
+            if cleaned_blocks: 
+                # Yêu cầu: Câu 1.
+                update_label_in_node(cleaned_blocks[0], f"Câu {new_idx + 1}. ")
             shuffled_output.extend(cleaned_blocks)
             key_map[new_idx + 1] = ans_text
             continue
 
+        # --- PHẦN 1 & 2 ---
         intro = []; options = []
         for b in q_blocks:
             txt = get_text_from_node(b)
@@ -176,10 +212,11 @@ def shuffle_questions(questions, mode="MCQ"):
             if is_opt:
                 is_correct = is_answer_marked(b)
                 clean_formatting(b)
-                options.append({'node': b, 'correct': is_correct})
+                options.append({'node': b, 'correct': is_correct, 'text': txt})
             else: intro.append(b)
         
         correct_char = ""
+        
         if options:
             if mode == "MCQ":
                 random.shuffle(options)
@@ -187,13 +224,28 @@ def shuffle_questions(questions, mode="MCQ"):
                     lbl = labels_mcq[i] if i < 4 else "*"
                     update_label_in_node(opt['node'], lbl)
                     if opt['correct']: correct_char = lbl[0]
+            
             elif mode == "TF":
-                random.shuffle(options)
-                for i, opt in enumerate(options):
+                # Giữ d) ở cuối
+                d_node = None
+                others = []
+                for opt in options:
+                    if re.match(r'^\s*d[\)]', opt['text'], re.IGNORECASE): d_node = opt
+                    else: others.append(opt)
+                
+                random.shuffle(others)
+                final_opts = others
+                if d_node: final_opts.append(d_node)
+                
+                for i, opt in enumerate(final_opts):
                     lbl = labels_tf[i] if i < 4 else "*"
                     update_label_in_node(opt['node'], lbl)
-        
-        if intro: update_label_in_node(intro[0], f"Câu {new_idx + 1}.")
+                options = final_opts
+
+        # Cập nhật nhãn Câu (1 dấu chấm)
+        if intro: 
+            update_label_in_node(intro[0], f"Câu {new_idx + 1}. ")
+            
         if mode == "MCQ": key_map[new_idx + 1] = correct_char if correct_char else "X"
             
         shuffled_output.extend(intro)
@@ -201,43 +253,43 @@ def shuffle_questions(questions, mode="MCQ"):
         
     return shuffled_output, key_map
 
-# --- TÍNH NĂNG MỚI: TẠO FILE ĐÁP ÁN WORD ---
+# --- TẠO FILE ĐÁP ÁN WORD ---
 def create_word_answer_key(excel_data_list):
     doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(12)
+    
     doc.add_heading('BẢNG ĐÁP ÁN CHI TIẾT', 0)
     
     for data in excel_data_list:
         exam_code = data.get("Mã đề", "Unknown")
-        doc.add_heading(f'Mã đề: {exam_code}', level=1)
+        p = doc.add_paragraph()
+        p.add_run(f'Mã đề: {exam_code}').bold = True
         
-        # Lọc lấy các câu hỏi (key là số)
         questions = {int(k): v for k, v in data.items() if k.isdigit()}
         sorted_q = sorted(questions.items())
         
         if not sorted_q: continue
         
-        # Tạo bảng
         table = doc.add_table(rows=1, cols=10)
         table.style = 'Table Grid'
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         
-        # Header hàng đầu tiên
         hdr_cells = table.rows[0].cells
         for i in range(10):
             hdr_cells[i].text = "Câu-ĐA"
+            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
             
-        # Điền dữ liệu
         row_cells = None
         for idx, (q_num, ans) in enumerate(sorted_q):
             col_idx = idx % 10
-            if col_idx == 0:
-                row_cells = table.add_row().cells
-            
+            if col_idx == 0: row_cells = table.add_row().cells
             row_cells[col_idx].text = f"{q_num}-{ans}"
             
-        doc.add_paragraph("\n") # Khoảng cách giữa các mã đề
+        doc.add_paragraph("\n")
 
-    # Lưu vào buffer
     f = io.BytesIO()
     doc.save(f)
     return f.getvalue()
@@ -250,9 +302,9 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
             for filename in zin.namelist():
                 if filename == "word/document.xml": xml_content = zin.read(filename).decode('utf-8')
                 else: resources[filename] = zin.read(filename)
-    except Exception as e: return None, None, None, [f"Lỗi đọc file: {str(e)}"]
+    except Exception as e: return None, None, [f"Lỗi đọc file: {str(e)}"]
 
-    if not xml_content: return None, None, None, ["Không tìm thấy document.xml"]
+    if not xml_content: return None, None, ["Không tìm thấy document.xml"]
 
     dom = minidom.parseString(xml_content)
     body = dom.getElementsByTagNameNS(W_NS, "body")[0]
@@ -272,10 +324,13 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
     if current_part: parts.append(current_part)
     if not parts: parts = [all_blocks]
 
-    output_zip_io = io.BytesIO()
+    # --- TẠO 1 FILE ZIP CHỨA TẤT CẢ ---
+    final_zip_io = io.BytesIO()
     excel_data_list = []
     
-    with zipfile.ZipFile(output_zip_io, 'w', zipfile.ZIP_DEFLATED) as zout:
+    with zipfile.ZipFile(final_zip_io, 'w', zipfile.ZIP_DEFLATED) as master_zip:
+        
+        # 1. Tạo các đề thi
         for ver in range(num_exams):
             current_code = str(start_id + ver)
             curr_dom = minidom.parseString(xml_content)
@@ -315,7 +370,8 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
                 for node in shuffled_nodes:
                     txt = get_text_from_node(node)
                     if re.match(r'^\s*Câu\s*\d+', txt):
-                        update_label_in_node(node, f"Câu {global_q_idx + local_count}.")
+                        # Cập nhật nhãn Câu toàn cục (1 dấu chấm)
+                        update_label_in_node(node, f"Câu {global_q_idx + local_count}. ")
                         local_count += 1
                     final_nodes.append(node)
                 
@@ -331,31 +387,32 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
                 sub_z.writestr("word/document.xml", new_xml.encode('utf-8'))
                 for name, content in resources.items(): sub_z.writestr(name, content)
             
-            zout.writestr(f"De_{current_code}.docx", sub_io.getvalue())
+            # Ghi file đề vào thư mục De_Thi trong Zip
+            master_zip.writestr(f"De_Thi/De_{current_code}.docx", sub_io.getvalue())
             excel_data_list.append(exam_key)
             
-    # Tạo Excel
-    df = pd.DataFrame(excel_data_list)
-    cols = ["Mã đề"] + sorted([c for c in df.columns if c != "Mã đề"], key=lambda x: int(x) if x.isdigit() else 999)
-    df = df[cols] if not df.empty else df
-    excel_io = io.BytesIO()
-    try:
-        with pd.ExcelWriter(excel_io, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='DapAn')
-        excel_bytes = excel_io.getvalue()
-    except:
-        excel_bytes = None # Fallback nếu lỗi excel
+        # 2. Tạo Excel đáp án
+        df = pd.DataFrame(excel_data_list)
+        cols = ["Mã đề"] + sorted([c for c in df.columns if c != "Mã đề"], key=lambda x: int(x) if x.isdigit() else 999)
+        df = df[cols] if not df.empty else df
+        excel_io = io.BytesIO()
+        try:
+            with pd.ExcelWriter(excel_io, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='DapAn')
+            master_zip.writestr("Dap_An_Excel.xlsx", excel_io.getvalue())
+        except: pass
 
-    # Tạo Word Đáp Án
-    word_bytes = create_word_answer_key(excel_data_list)
+        # 3. Tạo Word Đáp án
+        word_bytes = create_word_answer_key(excel_data_list)
+        master_zip.writestr("Dap_An_Word.docx", word_bytes)
         
-    return output_zip_io.getvalue(), excel_bytes, word_bytes, errors
+    return final_zip_io.getvalue(), None, None, errors
 
 # ==================== MAIN ====================
 def main():
     st.markdown("""
     <div class="main-header">
-        <h1>TRƯỜNG THPT MINH ĐỨC</h1>
+        <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
         <p>APP TRỘN ĐỀ 2025 - PRO VERSION</p>
     </div>
     """, unsafe_allow_html=True)
@@ -364,7 +421,8 @@ def main():
 
     with col1:
         with st.expander("📄 Hướng dẫn & File Mẫu", expanded=True):
-            sample_url = "https://docs.google.com/document/d/1mnQqyUqQMRSbhxLDP_E_CswHvHlXziFU/export?format=docx"
+            # LINK FILE MỚI CỦA BẠN
+            sample_url = "https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/export?format=docx"
             st.link_button("📥 Tải File Mẫu", sample_url, use_container_width=True)
             st.markdown("""
             <div class="info-box" style="margin-top:15px;">
@@ -373,7 +431,7 @@ def main():
             </div>
             <div class="warning-box">
                 <div class="warning-header">⚠️ Lưu ý:</div>
-                <ul><li>Đáp án: <b>Gạch chân</b> hoặc <b>Tô đỏ</b></li><li>Phần 3: Ghi <b style="color:#d32f2f">ĐS: Kết quả</b> và tô đỏ.</li></ul>
+                <ul><li>Câu hỏi: <code>Câu 1.</code> (1 dấu chấm)</li><li>Đáp án d) (Phần 2) luôn cố định ở cuối.</li></ul>
             </div>
             """, unsafe_allow_html=True)
 
@@ -388,13 +446,20 @@ def main():
         selected_mode = mode_map[shuffle_opt]
 
         st.write("")
+        # --- INPUT ĐƯỢC TÔ MÀU ĐẸP ---
         c1, c2 = st.columns(2)
-        with c1: num_exams = st.number_input("Số lượng đề", 1, 50, 4)
-        with c2: start_id = st.number_input("Mã bắt đầu", 1, 9999, 1001)
-        st.caption(f"📍 Mã đề: {start_id} ➝ {start_id + num_exams - 1}")
+        with c1:
+            st.markdown('<div class="config-card"><span class="config-label">SỐ LƯỢNG ĐỀ</span></div>', unsafe_allow_html=True)
+            num_exams = st.number_input("Số lượng", 1, 50, 4, label_visibility="collapsed")
+        with c2:
+            st.markdown('<div class="config-card"><span class="config-label">MÃ BẮT ĐẦU</span></div>', unsafe_allow_html=True)
+            start_id = st.number_input("Mã bắt đầu", 1, 9999, 1001, label_visibility="collapsed")
+            
+        st.caption(f"📍 Sẽ tạo các mã đề từ: {start_id} ➝ {start_id + num_exams - 1}")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🚀 Trộn đề & Tạo đáp án"):
+        # NÚT TẢI TRỌN BỘ
+        if st.button("🚀 Trộn đề & Tải Trọn Bộ (ZIP)"):
             if not uploaded_file: st.error("⚠️ Vui lòng chọn file đề trước!")
             else:
                 with st.spinner("⏳ Đang xử lý..."):
@@ -402,27 +467,25 @@ def main():
                         file_bytes = uploaded_file.read()
                         uploaded_file.seek(0)
                         
-                        zip_data, excel_data, word_data, errors = process_docx(file_bytes, num_exams, start_id, selected_mode)
+                        # Chỉ trả về 1 biến zip_data
+                        zip_data, _, _, errors = process_docx(file_bytes, num_exams, start_id, selected_mode)
                         
                         if errors:
                             for e in errors: st.error(e)
                         
                         if zip_data:
-                            col_d1, col_d2, col_d3 = st.columns(3)
-                            with col_d1:
-                                st.download_button("📦 Tải Bộ Đề (ZIP)", zip_data, f"Bo_De_{uploaded_file.name}.zip", "application/zip")
-                            with col_d2:
-                                if excel_data:
-                                    st.download_button("📊 Đáp Án (Excel)", excel_data, "Dap_An.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                            with col_d3:
-                                if word_data:
-                                    st.download_button("📝 Đáp Án (Word)", word_data, "Dap_An.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                            
+                            st.download_button(
+                                "📦 Tải Trọn Bộ (ZIP)", 
+                                zip_data, 
+                                f"Tron_Bo_De_{uploaded_file.name}.zip", 
+                                "application/zip",
+                                type="primary"
+                            )
                             st.balloons()
                             
                     except Exception as e: st.error(f"Lỗi: {str(e)}")
 
-    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 2.0</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 2.2</div>""", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
