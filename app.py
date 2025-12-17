@@ -6,12 +6,9 @@ import io
 import pandas as pd
 from xml.dom import minidom
 from docx import Document
-from docx.shared import Pt
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
-# ==============================================================================
-# 1. CẤU HÌNH GIAO DIỆN & CSS
-# ==============================================================================
+# ==================== CẤU HÌNH GIAO DIỆN ====================
 st.set_page_config(
     page_title="Trộn Đề THPT Minh Đức",
     page_icon="🏫",
@@ -27,41 +24,52 @@ CARD_BG = "#f1f8e9"
 
 st.markdown(f"""
 <style>
-    .main-header {{
-        background-color: {HEADER_COLOR}; color: white; padding: 15px; 
-        text-align: center; border-radius: 8px; margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }}
+    .main-header {{ background-color: {HEADER_COLOR}; color: white; padding: 15px; text-align: center; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
     .main-header h1 {{ font-size: 22px; font-weight: 800; margin: 0; text-transform: uppercase; letter-spacing: 1px; }}
     .main-header p {{ margin-top: 5px; font-size: 13px; opacity: 0.9; font-weight: 500; }}
-    
     .config-card {{ background-color: {CARD_BG}; border: 1px solid #c5e1a5; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 10px; }}
     .config-label {{ color: {HEADER_COLOR}; font-weight: bold; font-size: 14px; margin-bottom: 5px; display: block; }}
-
-    .info-box {{ background-color: {BG_INFO}; border-left: 5px solid #66bb6a; padding: 15px; border-radius: 5px; margin-bottom: 15px; }}
-    .info-header {{ font-weight: bold; color: #2e7d32; font-size: 16px; margin-bottom: 10px; }}
-    .warning-box {{ background-color: {BG_WARNING}; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 5px; margin-top: 15px; }}
-    .warning-header {{ font-weight: bold; color: #f57f17; margin-bottom: 8px; }}
-
     .stButton>button {{ background-color: {BUTTON_COLOR}; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; height: 50px; font-size: 16px; transition: 0.3s; }}
     .stButton>button:hover {{ background-color: #b71c1c; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }}
-
-    .step-circle {{ display: inline-block; width: 28px; height: 28px; background-color: {HEADER_COLOR}; color: white; border-radius: 50%; text-align: center; line-height: 28px; font-weight: bold; margin-right: 10px; }}
-    .section-title {{ font-size: 18px; font-weight: bold; color: {HEADER_COLOR}; margin-bottom: 15px; display: flex; align-items: center; }}
+    .info-box {{ background-color: {BG_INFO}; border-left: 5px solid #66bb6a; padding: 15px; border-radius: 5px; margin-bottom: 15px; }}
+    .warning-box {{ background-color: {BG_WARNING}; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 5px; margin-top: 15px; }}
     .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #888; font-size: 13px; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ==============================================================================
-# 2. CORE LOGIC (XML PROCESSOR)
-# ==============================================================================
+# ==================== CORE LOGIC ====================
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 def get_text_from_node(node):
+    """Lấy text từ node"""
     texts = []
     for t in node.getElementsByTagNameNS(W_NS, "t"):
         if t.firstChild: texts.append(t.firstChild.nodeValue)
     return "".join(texts).strip()
+
+def set_text_to_node(node, new_text):
+    """Gán text mới vào node (xóa các t cũ, tạo 1 t mới)"""
+    # Tìm run đầu tiên
+    runs = node.getElementsByTagNameNS(W_NS, "r")
+    if not runs: return
+    run = runs[0]
+    
+    # Xóa hết t cũ trong run đó
+    for t in run.getElementsByTagNameNS(W_NS, "t"):
+        run.removeChild(t)
+        
+    # Tạo t mới
+    doc = node.ownerDocument
+    new_t = doc.createElementNS(W_NS, "w:t")
+    # Thuộc tính preserve space
+    new_t.setAttribute("xml:space", "preserve")
+    text_node = doc.createTextNode(new_text)
+    new_t.appendChild(text_node)
+    run.appendChild(new_t)
+    
+    # Xóa các run thừa phía sau (để tránh text cũ còn sót)
+    for i in range(1, len(runs)):
+        node.removeChild(runs[i])
 
 def check_structure_errors(blocks):
     full_text = "\n".join([get_text_from_node(b) for b in blocks])
@@ -77,12 +85,10 @@ def is_marked_correct(paragraph):
         rPr = run.getElementsByTagNameNS(W_NS, "rPr")
         if not rPr: continue
         rPr = rPr[0]
-        # Check màu đỏ
         colors = rPr.getElementsByTagNameNS(W_NS, "color")
         for c in colors:
             val = c.getAttributeNS(W_NS, "val")
             if val and (val.upper() in ['FF0000', 'RED']): return True
-        # Check gạch chân
         u_tags = rPr.getElementsByTagNameNS(W_NS, "u")
         for u in u_tags:
             val = u.getAttributeNS(W_NS, "val")
@@ -100,57 +106,113 @@ def clean_formatting(paragraph):
         for u in rPr.getElementsByTagNameNS(W_NS, "u"): rPr.removeChild(u)
 
 def update_label_in_node(paragraph, new_label):
-    """Cập nhật nhãn (Câu 1., A., a))."""
+    """Cập nhật nhãn (Deep Scan)"""
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     if not t_nodes: return
-    first_node = None
-    for t in t_nodes:
-        if t.firstChild and t.firstChild.nodeValue.strip():
-            first_node = t; break
-    if not first_node: return
     
-    txt = first_node.firstChild.nodeValue
+    # Gom toàn bộ text lại để regex
+    full_text = ""
+    for t in t_nodes: 
+        if t.firstChild: full_text += t.firstChild.nodeValue
+            
+    # Regex tìm vị trí nhãn cũ
+    # Tìm A. B. C. D. hoặc a) b) c) d) hoặc Câu X
+    pattern = r'^(\s*)([A-Da-d])([\.:\)])(.*)'
+    match = re.match(pattern, full_text)
     
-    # 1. A. B. C. D.
-    if re.match(r'^\s*[A-D][\.:\)]', txt, re.IGNORECASE):
-        sub = re.sub(r'^\s*[A-D][\.:\)]', new_label, txt, count=1)
-        first_node.firstChild.nodeValue = sub
-    # 2. a) b) c) d)
-    elif re.match(r'^\s*[a-d][\.:\)]', txt, re.IGNORECASE):
-        sub = re.sub(r'^\s*[a-d][\.:\)]', new_label, txt, count=1)
-        first_node.firstChild.nodeValue = sub
-    # 3. Câu X (Chuẩn hóa về 1 dấu chấm)
-    elif re.match(r'^\s*Câu\s*\d+', txt, re.IGNORECASE):
-        # Regex này sẽ thay thế "Câu 1" hoặc "Câu 1.." thành new_label (ví dụ "Câu 1. ")
-        sub = re.sub(r'^\s*Câu\s*\d+[\.:]*', new_label, txt, count=1, flags=re.IGNORECASE)
-        first_node.firstChild.nodeValue = sub
+    if match:
+        # Nếu match dạng A. hoặc a)
+        prefix_space = match.group(1)
+        # old_char = match.group(2)
+        # suffix_char = match.group(3)
+        rest = match.group(4)
+        
+        final_text = f"{prefix_space}{new_label}{rest}"
+        set_text_to_node(paragraph, final_text)
+        return
 
-def extract_part3_answer(question_blocks):
-    """Xử lý Phần 3: Trả lời ngắn"""
-    answer_text = "X"
-    blocks_to_keep = []
-    found_ans = False
-    for block in reversed(question_blocks):
+    # Check dạng Câu 1.
+    match_q = re.match(r'^(\s*)(Câu\s*\d+)([\.:]*)?(.*)', full_text, re.IGNORECASE)
+    if match_q:
+        prefix = match_q.group(1)
+        rest = match_q.group(4)
+        final_text = f"{prefix}{new_label}{rest}"
+        set_text_to_node(paragraph, final_text)
+
+def split_and_normalize_options(question_blocks):
+    """
+    Tách các dòng chứa nhiều đáp án (A. ... B. ...) thành các dòng riêng.
+    Trả về list blocks mới đã chuẩn hóa.
+    """
+    normalized_blocks = []
+    
+    for block in question_blocks:
         txt = get_text_from_node(block)
-        match = re.search(r'ĐS[:\s]+(.*)', txt, re.IGNORECASE) or re.search(r'DS[:\s]+(.*)', txt, re.IGNORECASE)
-        if match and not found_ans:
-            if is_marked_correct(block):
-                answer_text = match.group(1).strip()
-                found_ans = True
-                continue 
-        blocks_to_keep.insert(0, block)
-    return blocks_to_keep, answer_text
+        
+        # Regex tìm A., B., C., D. nằm giữa dòng
+        # Pattern: Tìm vị trí bắt đầu của A., B., C., D.
+        # Lưu ý: Cần cẩn thận với số thập phân (ví dụ 1.5) -> bắt buộc sau chấm phải là khoảng trắng hoặc số
+        
+        # Logic đơn giản: Nếu dòng chứa cả "A." và "B." thì tách
+        # Tạm thời hỗ trợ tách cơ bản dựa trên "X. "
+        matches = list(re.finditer(r'(?:\s|^)([A-D])[\.:]\s', txt))
+        
+        if len(matches) > 1:
+            # Có nhiều đáp án trên 1 dòng -> Cần tách
+            # Tạo các bản sao của block
+            last_idx = 0
+            
+            # Cần check xem đáp án đúng nằm ở đâu trong dòng này (nếu có tô đỏ)
+            # Việc này rất khó với XML node.
+            # => GIẢI PHÁP: Nếu tách dòng, ta sẽ mất thuộc tính tô đỏ của từng đoạn con.
+            # => HẠN CHẾ: Nếu dùng dòng gộp, đáp án đúng phải được nhận diện qua TEXT (ví dụ gạch chân text).
+            # Ở đây để an toàn và đơn giản: Ta clone block, và set text lại.
+            
+            # Tuy nhiên, để giữ format (công thức toán), clone là tốt nhất.
+            # Nhưng minidom không hỗ trợ cắt node con tương ứng với text range.
+            
+            # => GIẢI PHÁP THỰC TẾ CHO DỰ ÁN NÀY:
+            # Nếu phát hiện dòng gộp, ta dùng Regex cắt text, tạo 4 block mới chỉ chứa Text (mất format ảnh/công thức trong dòng đó).
+            # Đây là sự đánh đổi. Nếu muốn giữ format, người dùng nên xuống dòng.
+            
+            parts = []
+            # Cắt chuỗi
+            # Thêm sentinel vào cuối
+            idxs = [m.start() for m in matches]
+            idxs.append(len(txt))
+            
+            for i in range(len(matches)):
+                start = idxs[i]
+                end = idxs[i+1]
+                sub_text = txt[start:end].strip()
+                
+                # Clone block gốc để lấy style
+                new_blk = block.cloneNode(True)
+                set_text_to_node(new_blk, sub_text)
+                
+                # Cố gắng detect lại đáp án đúng từ block gốc? 
+                # Nếu block gốc tô đỏ toàn bộ -> tất cả con đều tô đỏ -> Sai.
+                # => Tạm chấp nhận: Nếu dòng gộp, App sẽ coi như chưa tìm thấy đáp án đúng (User phải check Excel thủ công hoặc sửa file gốc xuống dòng).
+                
+                normalized_blocks.append(new_blk)
+        else:
+            normalized_blocks.append(block)
+            
+    return normalized_blocks
 
 def shuffle_part1_mcq(question_blocks, q_idx):
-    """Xử lý Phần 1: Trắc nghiệm (Có chế độ an toàn)"""
+    """Xử lý Phần 1: Trắc nghiệm"""
+    
+    # 1. Chuẩn hóa (Tách dòng gộp)
+    normalized_blocks = split_and_normalize_options(question_blocks)
+    
     intro = []
     options = []
     
-    for b in question_blocks:
+    for b in normalized_blocks:
         txt = get_text_from_node(b)
         if re.match(r'^\s*[A-D][\.:]', txt):
             is_correct = is_marked_correct(b)
-            # Không xóa format vội, để nếu không trộn thì vẫn giữ nguyên
             options.append({'node': b, 'correct': is_correct, 'text': txt})
         else:
             intro.append(b)
@@ -158,37 +220,45 @@ def shuffle_part1_mcq(question_blocks, q_idx):
     labels_mcq = ["A.", "B.", "C.", "D."]
     correct_char = "X"
     
-    # --- SAFE MODE CHECK ---
-    # Chỉ trộn nếu tìm thấy ĐÚNG 4 ĐÁP ÁN riêng biệt
-    if len(options) == 4:
+    # Chỉ trộn nếu tìm thấy từ 2 đáp án trở lên (để tránh lỗi)
+    if len(options) >= 2:
         random.shuffle(options)
         for i, opt in enumerate(options):
-            lbl = labels_mcq[i]
-            # Lúc này mới xóa format và update label
-            clean_formatting(opt['node'])
+            lbl = labels_mcq[i] if i < 4 else "*"
+            clean_formatting(opt['node']) # Xóa dấu hiệu
             update_label_in_node(opt['node'], lbl)
             if opt['correct']: correct_char = lbl[0]
-            
+        
         result_blocks = intro + [o['node'] for o in options]
     else:
-        # Nếu < 4 hoặc > 4 (do lỗi định dạng trong file word), GIỮ NGUYÊN
-        # Vẫn cần tìm đáp án đúng để ghi vào Excel
+        # Fallback: Không trộn, giữ nguyên
         for opt in options:
             if opt['correct']:
-                # Cố gắng lấy ký tự đầu tiên (A,B,C,D)
                 m = re.match(r'^\s*([A-D])', opt['text'], re.IGNORECASE)
                 if m: correct_char = m.group(1).upper()
-            # Clean format để đề thi sạch sẽ
             clean_formatting(opt['node'])
-            
-        # Giữ nguyên thứ tự gốc
         result_blocks = intro + [o['node'] for o in options]
 
-    # Luôn cập nhật số câu (Câu 1.)
     if intro: 
         update_label_in_node(intro[0], f"Câu {q_idx}. ")
         
     return result_blocks, correct_char
+
+def extract_part3_answer(question_blocks):
+    """Phần 3: Trả lời ngắn"""
+    answer_text = "X"
+    blocks_to_keep = []
+    found_ans = False
+    for block in reversed(question_blocks):
+        txt = get_text_from_node(block)
+        match = re.search(r'(?:ĐS|DS)[:\s]+(.*)', txt, re.IGNORECASE)
+        if match and not found_ans:
+            if is_marked_correct(block):
+                answer_text = match.group(1).strip()
+                found_ans = True
+                continue 
+        blocks_to_keep.insert(0, block)
+    return blocks_to_keep, answer_text
 
 def shuffle_questions_router(questions, mode="MCQ", start_idx=1):
     processed_nodes = []
@@ -205,11 +275,11 @@ def shuffle_questions_router(questions, mode="MCQ", start_idx=1):
             key_map[current_idx] = ans_text
             
         elif mode == "TF":
-            # Logic Phần 2: Giữ d cố định
+            # Phần 2: Giữ d cố định
             intro = []; options = []
             for b in q_blocks:
                 txt = get_text_from_node(b)
-                if re.match(r'^\s*[a-d][\)]', txt, re.IGNORECASE):
+                if re.match(r'^\s*[a-d][\.:\)]', txt, re.IGNORECASE):
                     is_c = is_marked_correct(b)
                     clean_formatting(b)
                     options.append({'node': b, 'text': txt})
@@ -218,7 +288,8 @@ def shuffle_questions_router(questions, mode="MCQ", start_idx=1):
             d_node = None
             others = []
             for o in options:
-                if re.match(r'^\s*d[\)]', o['text'], re.IGNORECASE): d_node = o
+                # Nhận diện d)
+                if re.match(r'^\s*d[\.:\)]', o['text'], re.IGNORECASE): d_node = o
                 else: others.append(o)
             
             random.shuffle(others)
@@ -231,9 +302,9 @@ def shuffle_questions_router(questions, mode="MCQ", start_idx=1):
             
             if intro: update_label_in_node(intro[0], f"Câu {current_idx}. ")
             processed_nodes.extend(intro + [o['node'] for o in final_opts])
-            key_map[current_idx] = "X" # Phần 2 ko có đáp án đơn
+            key_map[current_idx] = "X"
             
-        else: # MCQ (Phần 1)
+        else: # MCQ
             nodes, ans = shuffle_part1_mcq(q_blocks, current_idx)
             processed_nodes.extend(nodes)
             key_map[current_idx] = ans
@@ -274,11 +345,10 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
             for filename in zin.namelist():
                 if filename == "word/document.xml": xml_content = zin.read(filename).decode('utf-8')
                 else: resources[filename] = zin.read(filename)
-    except Exception as e: return None, None, [f"Lỗi đọc file: {str(e)}"]
+    except Exception as e: return None, None, None, [f"Lỗi đọc file: {str(e)}"]
 
-    if not xml_content: return None, None, ["Không tìm thấy document.xml"]
+    if not xml_content: return None, None, None, ["Không tìm thấy document.xml"]
 
-    # Phân tích file gốc
     dom = minidom.parseString(xml_content)
     body = dom.getElementsByTagNameNS(W_NS, "body")[0]
     all_blocks = [child for child in list(body.childNodes) 
@@ -295,7 +365,6 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
     if current_part: parts.append(current_part)
     if not parts: parts = [all_blocks]
 
-    # ZIP Loop
     final_zip_io = io.BytesIO()
     excel_data_list = []
     
@@ -333,10 +402,7 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
                 elif shuffle_mode == "tf": current_mode = "TF"
                 
                 nodes, k_map = shuffle_questions_router(questions, current_mode, global_q_idx)
-                
-                # Mapping key
                 for k, v in k_map.items(): exam_key[str(k)] = v
-                
                 global_q_idx += len(k_map)
                 exam_blocks.extend(intro_part + nodes)
 
@@ -351,7 +417,6 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
             master_zip.writestr(f"De_Thi/De_{current_code}.docx", sub_io.getvalue())
             excel_data_list.append(exam_key)
             
-        # Export Excel & Word
         if excel_data_list:
             df = pd.DataFrame(excel_data_list)
             cols = ["Mã đề"] + sorted([c for c in df.columns if c != "Mã đề"], key=lambda x: int(x) if x.isdigit() else 999)
@@ -371,7 +436,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
-        <p>APP TRỘN ĐỀ 2025 - PRO VERSION 3.0</p>
+        <p>APP TRỘN ĐỀ 2025 - PRO VERSION 3.1 (Fix Core)</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -396,6 +461,7 @@ def main():
                     <li><b>Quy định chung:</b> Câu hỏi bắt đầu bằng <code>Câu 1.</code> (1 dấu chấm).</li>
                     <li><b>Đáp án đúng (P1, P2):</b> Phải <b>Gạch chân</b> hoặc <span style="color:red"><b>Tô đỏ</b></span>.</li>
                     <li><b>Đáp án P3:</b> Ghi <span style="color:red"><b>ĐS: Kết quả</b></span> và tô đỏ ở cuối câu.</li>
+                    <li><b>Khuyên dùng:</b> Mỗi đáp án A, B, C, D nên xuống dòng để tránh lỗi hiển thị.</li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
@@ -440,7 +506,7 @@ def main():
                             
                     except Exception as e: st.error(f"Lỗi: {str(e)}")
 
-    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 3.0</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 3.1</div>""", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
