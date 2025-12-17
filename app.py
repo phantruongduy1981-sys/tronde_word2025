@@ -3,517 +3,596 @@ import re
 import random
 import zipfile
 import io
+import pandas as pd
 from xml.dom import minidom
 
-# ==================== CẤU HÌNH TRANG ====================
+# ==================== CẤU HÌNH TRANG & CSS ====================
 st.set_page_config(
-    page_title="Trộn Đề Word Pro - THPT Minh Đức",
+    page_title="Trộn Đề Word - THPT Minh Đức",
     page_icon="🏫",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS
-st.markdown("""
+# Màu sắc chủ đạo
+PRIMARY_COLOR = "#00796b" 
+BG_YELLOW = "#fff9c4"
+TEXT_RED = "#d32f2f"
+
+st.markdown(f"""
 <style>
-    .header-banner {
-        background-color: #00796b;
+    /* Header chính */
+    .main-header {{
+        background-color: {PRIMARY_COLOR};
         color: white;
-        padding: 0.8rem;
-        border-radius: 12px;
+        padding: 20px;
         text-align: center;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .header-banner h1 { font-size: 1.8rem; font-weight: 800; margin: 0; color: white; text-transform: uppercase; }
-    .step-label { font-weight: bold; font-size: 1.1rem; color: #004d40; margin-bottom: 0.5rem; display: flex; align-items: center; }
-    .step-circle { background-color: #009688; color: white; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; }
-    div[data-testid="stFileUploader"] { border: 1px dashed #009688; border-radius: 10px; padding: 10px; }
-    .footer { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #f1f5f9; text-align: center; padding: 5px; font-size: 0.7rem; color: #64748b; border-top: 1px solid #e2e8f0; z-index: 999; }
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }}
+    .main-header h1 {{
+        font-size: 28px;
+        font-weight: bold;
+        margin: 0;
+        text-transform: uppercase;
+        color: white;
+    }}
+    .main-header p {{
+        margin: 5px 0 0 0;
+        font-size: 16px;
+        opacity: 0.9;
+    }}
+
+    /* Khung Hướng dẫn */
+    .info-box {{
+        background-color: #f1f8e9;
+        border: 1px solid #c5e1a5;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        line-height: 1.6;
+    }}
+    .info-title {{
+        color: {PRIMARY_COLOR};
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        border-bottom: 2px solid {PRIMARY_COLOR};
+        display: inline-block;
+    }}
+    .part-label {{
+        font-weight: bold;
+        color: #2e7d32;
+    }}
+    
+    /* Khung Cảnh báo/Quy ước */
+    .warning-box {{
+        background-color: {BG_YELLOW};
+        border: 1px solid #fff59d;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 15px;
+        font-size: 14px;
+        color: #f57f17;
+    }}
+    .warning-title {{
+        font-weight: bold;
+        color: #ef6c00;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+    }}
+    
+    /* Upload Box */
+    .upload-container {{
+        border: 2px dashed #b2dfdb;
+        border-radius: 5px;
+        padding: 20px;
+        text-align: center;
+        background-color: #fafafa;
+    }}
+
+    /* Step circles */
+    .step-circle {{
+        display: inline-block;
+        width: 25px;
+        height: 25px;
+        background-color: {PRIMARY_COLOR};
+        color: white;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 25px;
+        font-weight: bold;
+        margin-right: 8px;
+    }}
+    .step-header {{
+        font-size: 16px;
+        font-weight: bold;
+        color: {PRIMARY_COLOR};
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+    }}
+
+    /* Nút bấm */
+    .stButton>button {{
+        background-color: {PRIMARY_COLOR};
+        color: white;
+        border: none;
+        border-radius: 5px;
+        font-weight: bold;
+        width: 100%;
+        height: 45px;
+    }}
+    .stButton>button:hover {{
+        background-color: #004d40;
+        color: white;
+    }}
+    
+    a[target="_blank"] {{ text-decoration: none; }}
+    
+    .error-msg {{
+        background-color: #ffebee;
+        color: {TEXT_RED};
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #ffcdd2;
+        margin-top: 10px;
+        font-size: 14px;
+    }}
+    
+    .footer {{
+        text-align: center;
+        font-size: 12px;
+        color: #757575;
+        margin-top: 30px;
+        padding-top: 10px;
+        border-top: 1px solid #eeeeee;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC XỬ LÝ XML (CORE - FIX LỖI) ====================
-
+# ==================== LOGIC XỬ LÝ WORD (CORE) ====================
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
-def get_full_text_from_paragraph(paragraph):
-    """Lấy toàn bộ text của đoạn văn để regex matching"""
+def get_text_from_node(node):
+    """Lấy text thuần từ XML node"""
     texts = []
-    t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
-    for t in t_nodes:
-        if t.firstChild and t.firstChild.nodeValue:
+    for t in node.getElementsByTagNameNS(W_NS, "t"):
+        if t.firstChild:
             texts.append(t.firstChild.nodeValue)
-    return "".join(texts)
+    return "".join(texts).strip()
 
-def check_is_marked_answer(block):
-    """Kiểm tra dấu hiệu đáp án (Gạch chân, Màu sắc, Highlight)"""
-    runs = block.getElementsByTagNameNS(W_NS, "r")
-    for r in runs:
-        rPr_list = r.getElementsByTagNameNS(W_NS, "rPr")
-        if not rPr_list: continue
-        rPr = rPr_list[0]
-        
-        # Check Underline
-        u_tags = rPr.getElementsByTagNameNS(W_NS, "u")
-        if u_tags:
-            val = u_tags[0].getAttributeNS(W_NS, "val")
-            if val and val.lower() != 'none': return True
+def check_structure_errors(blocks):
+    full_text = "\n".join([get_text_from_node(b) for b in blocks])
+    errors = []
+    if not re.search(r'Câu\s*1[\.:]', full_text, re.IGNORECASE):
+        errors.append("Không tìm thấy 'Câu 1'. File cần bắt đầu bằng Câu 1.")
+    return errors
 
-        # Check Color
+def is_answer_marked(paragraph):
+    """Kiểm tra đáp án có được tô đỏ/gạch chân không"""
+    runs = paragraph.getElementsByTagNameNS(W_NS, "r")
+    for run in runs:
+        rPr = run.getElementsByTagNameNS(W_NS, "rPr")
+        if not rPr: continue
+        rPr = rPr[0]
+        # Check màu đỏ
         colors = rPr.getElementsByTagNameNS(W_NS, "color")
-        if colors:
-            val = colors[0].getAttributeNS(W_NS, "val")
-            if val and val.lower() not in ['auto', '000000', 'black']: return True
-                
-        # Check Highlight/Shading
-        if rPr.getElementsByTagNameNS(W_NS, "highlight") or rPr.getElementsByTagNameNS(W_NS, "shd"):
-             return True
+        for c in colors:
+            val = c.getAttributeNS(W_NS, "val")
+            if val and (val.upper() in ['FF0000', 'RED']): return True
+        # Check gạch chân
+        u_tags = rPr.getElementsByTagNameNS(W_NS, "u")
+        for u in u_tags:
+            val = u.getAttributeNS(W_NS, "val")
+            if val and val != 'none': return True
     return False
 
-def remove_answer_formatting(block):
-    """Xóa định dạng đáp án"""
-    runs = block.getElementsByTagNameNS(W_NS, "r")
-    for r in runs:
-        rPr_list = r.getElementsByTagNameNS(W_NS, "rPr")
+def clean_formatting(paragraph):
+    """Xóa định dạng đỏ/gạch chân"""
+    runs = paragraph.getElementsByTagNameNS(W_NS, "r")
+    for run in runs:
+        rPr_list = run.getElementsByTagNameNS(W_NS, "rPr")
         if not rPr_list: continue
         rPr = rPr_list[0]
-        for tag in ["color", "u", "highlight", "shd", "b"]:
-            nodes = rPr.getElementsByTagNameNS(W_NS, tag)
-            for node in nodes:
-                rPr.removeChild(node)
+        for c in rPr.getElementsByTagNameNS(W_NS, "color"): rPr.removeChild(c)
+        for u in rPr.getElementsByTagNameNS(W_NS, "u"): rPr.removeChild(u)
 
-def clean_short_answer_content(block):
-    """Xử lý phần 3: Lấy đáp án và Xóa text 'ĐS:...' một cách an toàn"""
-    runs = block.getElementsByTagNameNS(W_NS, "r")
-    full_text = get_full_text_from_paragraph(block)
-    
-    match = re.search(r'(ĐS|Đáp số|DS)\s*[:\.]\s*(.*)', full_text, re.IGNORECASE)
-    found_answer = None
-    
-    if match:
-        found_answer = match.group(2).strip()
-        for r in runs:
-            t_nodes = r.getElementsByTagNameNS(W_NS, "t")
-            for t in t_nodes:
-                if t.firstChild and t.firstChild.nodeValue:
-                    val = t.firstChild.nodeValue
-                    if re.search(r'(ĐS|Đáp số|DS)', val, re.IGNORECASE):
-                        m_part = re.search(r'(.*?)(ĐS|Đáp số|DS)', val, re.IGNORECASE)
-                        if m_part:
-                            t.firstChild.nodeValue = m_part.group(1)
-                            t.setAttribute("xml:space", "preserve") 
-    return found_answer
-
-def style_run_blue_bold(run):
-    """Tô đậm xanh cho run chứa label"""
-    doc = run.ownerDocument
-    rPr_list = run.getElementsByTagNameNS(W_NS, "rPr")
-    if rPr_list: rPr = rPr_list[0]
-    else:
-        rPr = doc.createElementNS(W_NS, "w:rPr")
-        run.insertBefore(rPr, run.firstChild)
-    
-    color_list = rPr.getElementsByTagNameNS(W_NS, "color")
-    if not color_list:
-        color_el = doc.createElementNS(W_NS, "w:color")
-        rPr.appendChild(color_el)
-    else: color_el = color_list[0]
-    color_el.setAttributeNS(W_NS, "w:val", "0000FF")
-    
-    if not rPr.getElementsByTagNameNS(W_NS, "b"):
-        rPr.appendChild(doc.createElementNS(W_NS, "w:b"))
-
-def update_label_smart(paragraph, regex_pattern, new_label_text):
-    """
-    CẬP NHẬT LABEL THÔNG MINH (FIX LỖI DÍNH CHỮ)
-    """
+def update_label_in_node(paragraph, new_label):
+    """Cập nhật nhãn Câu X. hoặc A. B. C. D."""
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
-    if not t_nodes: return False
+    if not t_nodes: return
     
-    found = False
-    for i, t in enumerate(t_nodes):
-        if not t.firstChild or not t.firstChild.nodeValue: continue
-        txt = t.firstChild.nodeValue
-        
-        m = re.match(regex_pattern, txt, re.IGNORECASE)
-        if m:
-            # Giữ lại khoảng trắng đầu dòng (nếu có)
-            original_match = m.group(0)
-            leading_space = m.group(1) if m.lastindex and m.lastindex >= 1 else ""
-            
-            # Cắt bỏ phần label cũ, ghép label mới vào
-            remaining_text = txt[len(original_match):]
-            
-            # Label mới = (Khoảng trắng cũ) + (Label mới từ code) + (Text còn lại)
-            # new_label_text từ hàm gọi đã bao gồm dấu chấm (VD: "A.")
-            t.firstChild.nodeValue = leading_space + new_label_text + remaining_text
-            
-            # QUAN TRỌNG: Giữ nguyên khoảng cách
-            t.setAttribute("xml:space", "preserve")
-            
-            run = t.parentNode
-            if run and run.localName == "r": style_run_blue_bold(run)
-            
-            # Xóa các node rác (dấu chấm/ngoặc thừa) NHƯNG KHÔNG XÓA KHOẢNG TRẮNG
-            for j in range(i + 1, len(t_nodes)):
-                t2 = t_nodes[j]
-                if t2.firstChild and t2.firstChild.nodeValue:
-                    val = t2.firstChild.nodeValue
-                    # FIX LỖI DÍNH CHỮ: Chỉ xóa nếu là dấu chấm hoặc ngoặc. 
-                    # Nếu chứa khoảng trắng (\s), TUYỆT ĐỐI KHÔNG XÓA.
-                    if re.match(r'^[\.\)]+$', val): 
-                        t2.firstChild.nodeValue = ""
-                    else:
-                        break # Gặp chữ hoặc khoảng trắng thì dừng ngay
-            found = True
-            break
-    return found
-
-def shuffle_array(arr):
-    out = arr.copy()
-    for i in range(len(out) - 1, 0, -1):
-        j = random.randint(0, i)
-        out[i], out[j] = out[j], out[i]
-    return out
-
-# --- XỬ LÝ TỪNG LOẠI CÂU HỎI ---
-
-def process_mcq_question(question_blocks):
-    options = []
-    others = []
-    option_indices = []
-    
-    # Regex lỏng hơn để bắt được "A.", "A .", "A)"
-    # Regex: (Space)(A-D)(Space)(Dot or Paren or Empty)
-    label_regex = r'^\s*[A-D]\s*[\.\)]?'
-    
-    for i, block in enumerate(question_blocks):
-        txt = get_full_text_from_paragraph(block)
-        if re.match(label_regex, txt, re.IGNORECASE):
-            options.append(block)
-            option_indices.append(i)
-        else:
-            others.append(block)
-            
-    if len(options) < 2: return question_blocks, ""
-    
-    correct_original_idx = -1
-    for idx, opt in enumerate(options):
-        if check_is_marked_answer(opt):
-            correct_original_idx = idx
+    first_node = None
+    for t in t_nodes:
+        if t.firstChild and t.firstChild.nodeValue.strip():
+            first_node = t
             break
             
-    for opt in options: remove_answer_formatting(opt)
-        
-    tagged_options = []
-    for idx, opt in enumerate(options):
-        is_correct = (idx == correct_original_idx)
-        tagged_options.append((opt, is_correct))
-    shuffled_tagged = shuffle_array(tagged_options)
-    shuffled_blocks = [x[0] for x in shuffled_tagged]
+    if not first_node: return
+
+    txt = first_node.firstChild.nodeValue
+    # Regex thay thế
+    if re.match(r'^\s*[A-D][\.:\)]', txt, re.IGNORECASE):
+        sub = re.sub(r'^\s*[A-D][\.:\)]', new_label, txt, count=1)
+        first_node.firstChild.nodeValue = sub
+    elif re.match(r'^\s*[a-d][\.:\)]', txt, re.IGNORECASE):
+        sub = re.sub(r'^\s*[a-d][\.:\)]', new_label, txt, count=1)
+        first_node.firstChild.nodeValue = sub
+    elif re.match(r'^\s*Câu\s*\d+', txt, re.IGNORECASE):
+        sub = re.sub(r'^\s*Câu\s*\d+[\.:]?', new_label, txt, count=1, flags=re.IGNORECASE)
+        first_node.firstChild.nodeValue = sub
+
+def extract_part3_answer(question_blocks):
+    """
+    Tìm và trích xuất đáp án phần 3 (ĐS: ...)
+    Đồng thời xóa dòng đáp án đó khỏi block để in đề
+    Trả về: (Cleaned Blocks, Answer String)
+    """
+    answer_text = "X"
+    blocks_to_keep = []
     
-    new_correct_char = ""
-    chars = ["A", "B", "C", "D"]
-    for idx, (opt, is_correct) in enumerate(shuffled_tagged):
-        if is_correct:
-            new_correct_char = chars[idx] if idx < 4 else "?"
+    found_ans = False
+    
+    # Duyệt ngược để tìm đáp án (thường ở cuối câu)
+    for block in reversed(question_blocks):
+        txt = get_text_from_node(block)
+        
+        # Regex tìm "ĐS: giá_trị" hoặc "DS: giá_trị"
+        match = re.search(r'ĐS[:\s]+(.*)', txt, re.IGNORECASE)
+        if not match:
+            match = re.search(r'DS[:\s]+(.*)', txt, re.IGNORECASE) # Dự phòng trường hợp gõ ko dấu
             
-    for idx, block in enumerate(shuffled_blocks):
-        lbl = chars[idx] if idx < 4 else chars[-1]
-        # Regex update phải khớp với Regex nhận diện
-        # Group 1: Leading space. Group 2: Label char. Group 3: Space/Punct
-        update_label_smart(block, r'^(\s*)([A-D])(\s*[\.\)])?', f"{lbl}.")
+        if match and not found_ans:
+            # Kiểm tra xem có tô đỏ không
+            if is_answer_marked(block):
+                answer_text = match.group(1).strip()
+                found_ans = True
+                # Không thêm block này vào blocks_to_keep => Tức là XÓA nó khỏi đề thi
+                continue 
         
-    min_idx, max_idx = min(option_indices), max(option_indices)
-    final_blocks = question_blocks[:min_idx] + shuffled_blocks + question_blocks[max_idx+1:]
-    return final_blocks, new_correct_char
+        blocks_to_keep.insert(0, block) # Thêm vào đầu danh sách để giữ đúng thứ tự
+        
+    return blocks_to_keep, answer_text
 
-def process_tf_question(question_blocks):
-    opt_map = {}
-    label_regex = r'^\s*([a-d])\s*[\.\)]'
+def shuffle_questions(questions, mode="MCQ"):
+    """Hàm trộn câu hỏi và đáp án"""
+    indices = list(range(len(questions)))
+    random.shuffle(indices)
     
-    for i, block in enumerate(question_blocks):
-        txt = get_full_text_from_paragraph(block)
-        m = re.match(label_regex, txt, re.IGNORECASE)
-        if m:
-            key = m.group(1).lower()
-            opt_map[key] = (block, i)
+    shuffled_output = []
+    key_map = {} # {local_idx: answer_value}
+    
+    labels_mcq = ["A.", "B.", "C.", "D."]
+    labels_tf = ["a)", "b)", "c)", "d)"]
+    
+    for new_idx, old_idx in enumerate(indices):
+        q_blocks = questions[old_idx] 
+        
+        # XỬ LÝ RIÊNG CHO PHẦN 3 (Trả lời ngắn)
+        if mode == "FILL":
+            # Trích xuất đáp án và xóa dòng ĐS khỏi đề
+            cleaned_blocks, ans_text = extract_part3_answer(q_blocks)
             
-    if len(opt_map) < 2: return question_blocks, ""
-
-    items = []
-    for k in ['a', 'b', 'c', 'd']:
-        if k in opt_map:
-            blk = opt_map[k][0]
-            is_true = check_is_marked_answer(blk)
-            remove_answer_formatting(blk)
-            items.append({'key': k, 'block': blk, 'val': is_true})
+            # Cập nhật nhãn Câu X
+            if cleaned_blocks:
+                update_label_in_node(cleaned_blocks[0], f"Câu {new_idx + 1}.")
             
-    to_shuffle = [x for x in items if x['key'] in ['a','b','c']]
-    fixed = [x for x in items if x['key'] == 'd']
-    shuffled_abc = shuffle_array(to_shuffle)
-    final_order = shuffled_abc + fixed
-    
-    ans_parts = []
-    labels = ['a', 'b', 'c', 'd']
-    for idx, item in enumerate(final_order):
-        ans_parts.append("D" if item['val'] else "S")
-        lbl = labels[idx]
-        update_label_smart(item['block'], r'^(\s*)([a-d])(\s*[\.\)])?', f"{lbl})")
+            shuffled_output.extend(cleaned_blocks)
+            key_map[new_idx + 1] = ans_text
+            continue
+
+        # XỬ LÝ CHO MCQ và TF (Phần 1, 2)
+        intro = []
+        options = []
         
-    final_ans_str = "-".join(ans_parts)
-    indices = [opt_map[k][1] for k in opt_map]
-    min_idx, max_idx = min(indices), max(indices)
-    new_opt_blocks = [x['block'] for x in final_order]
-    
-    final_blocks = question_blocks[:min_idx] + new_opt_blocks + question_blocks[max_idx+1:]
-    return final_blocks, final_ans_str
-
-def process_short_ans_question(question_blocks):
-    answer_val = ""
-    for block in question_blocks:
-        extracted = clean_short_answer_content(block)
-        if extracted: answer_val = extracted
-    return question_blocks, answer_val
-
-# --- PARSING ---
-
-def parse_questions_in_range(blocks, start, end):
-    part_blocks = blocks[start:end]
-    intro = []
-    questions = []
-    i = 0
-    # Regex nhận diện câu hỏi: Chấp nhận "Câu 1.", "Câu 1:", "Câu 1"
-    q_regex = r'^Câu\s*\d+'
-    
-    while i < len(part_blocks):
-        if re.match(q_regex, get_full_text_from_paragraph(part_blocks[i]), re.IGNORECASE): break
-        intro.append(part_blocks[i])
-        i += 1
-    
-    while i < len(part_blocks):
-        txt = get_full_text_from_paragraph(part_blocks[i])
-        if re.match(q_regex, txt, re.IGNORECASE):
-            grp = [part_blocks[i]]
-            i += 1
-            while i < len(part_blocks):
-                t2 = get_full_text_from_paragraph(part_blocks[i])
-                if re.match(q_regex, t2, re.IGNORECASE) or re.search(r'PHẦN\s*\d', t2, re.IGNORECASE): break
-                grp.append(part_blocks[i])
-                i += 1
-            questions.append(grp)
-        else:
-            i += 1
-    return intro, questions
-
-def process_full_docx(file_bytes, code_name):
-    input_buffer = io.BytesIO(file_bytes)
-    zin = zipfile.ZipFile(input_buffer, 'r')
-    doc_xml = zin.read("word/document.xml").decode('utf-8')
-    dom = minidom.parseString(doc_xml)
-    body = dom.getElementsByTagNameNS(W_NS, "body")[0]
-    blocks = []
-    for child in body.childNodes:
-        if child.nodeType == child.ELEMENT_NODE and child.localName in ["p", "tbl"]:
-            blocks.append(child)
+        for b in q_blocks:
+            txt = get_text_from_node(b)
+            is_opt = False
+            if mode == "MCQ" and re.match(r'^\s*[A-D][\.:]', txt): is_opt = True
+            elif mode == "TF" and re.match(r'^\s*[a-d][\)]', txt): is_opt = True
             
-    p1_idx = -1; p2_idx = -1; p3_idx = -1
-    for i, b in enumerate(blocks):
-        t = get_full_text_from_paragraph(b)
-        if re.search(r'PHẦN\s*1', t, re.IGNORECASE): p1_idx = i
-        elif re.search(r'PHẦN\s*2', t, re.IGNORECASE): p2_idx = i
-        elif re.search(r'PHẦN\s*3', t, re.IGNORECASE): p3_idx = i
-        
-    exam_answers = {"P1": {}, "P2": {}, "P3": {}}
-    new_blocks = []
-    cursor = 0
-    
-    def handle_part(start_idx, end_idx, part_type):
-        intro, questions = parse_questions_in_range(blocks, start_idx, end_idx)
-        processed_qs = []
-        for q_blocks in questions:
-            if part_type == 1: b_new, ans = process_mcq_question(q_blocks)
-            elif part_type == 2: b_new, ans = process_tf_question(q_blocks)
-            else: b_new, ans = process_short_ans_question(q_blocks)
-            processed_qs.append((b_new, ans))
-            
-        shuffled_qs_with_ans = shuffle_array(processed_qs)
-        final_part_blocks = intro.copy()
-        
-        for idx, (q_blks, ans) in enumerate(shuffled_qs_with_ans):
-            if q_blks:
-                # Update "Câu X" (Group 1: space, Group 2: Câu, Group 3: number)
-                update_label_smart(q_blks[0], r'^(\s*)(Câu\s*)(\d+)(\s*[\.:])?', f"Câu {idx+1}.")
-            final_part_blocks.extend(q_blks)
-            exam_answers[f"P{part_type}"][idx+1] = ans
-        return final_part_blocks
-
-    if p1_idx != -1:
-        new_blocks.extend(blocks[cursor:p1_idx+1])
-        cursor = p1_idx + 1
-        end = p2_idx if p2_idx != -1 else (p3_idx if p3_idx != -1 else len(blocks))
-        new_blocks.extend(handle_part(cursor, end, 1))
-        cursor = end
-        
-    if p2_idx != -1:
-        new_blocks.append(blocks[p2_idx])
-        cursor = p2_idx + 1
-        end = p3_idx if p3_idx != -1 else len(blocks)
-        new_blocks.extend(handle_part(cursor, end, 2))
-        cursor = end
-        
-    if p3_idx != -1:
-        new_blocks.append(blocks[p3_idx])
-        cursor = p3_idx + 1
-        end = len(blocks)
-        new_blocks.extend(handle_part(cursor, end, 3))
-        cursor = end
-        
-    if p1_idx == -1 and p2_idx == -1 and p3_idx == -1:
-        new_blocks.extend(handle_part(0, len(blocks), 1))
-
-    for child in list(body.childNodes):
-        if child.nodeType == child.ELEMENT_NODE and child.localName not in ["sectPr"]:
-            body.removeChild(child)
-    for b in new_blocks: body.appendChild(b)
-        
-    new_xml = dom.toxml()
-    out_io = io.BytesIO()
-    with zipfile.ZipFile(out_io, 'w', zipfile.ZIP_DEFLATED) as zout:
-        for item in zin.infolist():
-            if item.filename == "word/document.xml":
-                zout.writestr(item, new_xml.encode('utf-8'))
+            if is_opt:
+                is_correct = is_answer_marked(b)
+                clean_formatting(b)
+                options.append({'node': b, 'correct': is_correct})
             else:
-                zout.writestr(item, zin.read(item.filename))
-    return out_io.getvalue(), exam_answers
-
-# --- TẠO FILE ĐÁP ÁN ---
-def generate_answer_key_doc(all_exam_data):
-    html = """<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Đáp Án</title><style>body { font-family: 'Times New Roman', serif; font-size: 12pt; } table { border-collapse: collapse; width: 100%; margin-bottom: 20px; } th, td { border: 1px solid black; padding: 5px; text-align: center; } th { background-color: #f2f2f2; font-weight: bold; } h2, h3 { text-align: center; margin: 10px 0; color: #003366; } .part-title { font-weight: bold; margin-top: 20px; color: #003366; }</style></head><body>"""
-    html += """<div style='text-align:center; font-weight:bold;'><p style='font-size:14pt; margin:0'>TRƯỜNG THPT MINH ĐỨC</p><p style='margin:0'>BẢNG ĐÁP ÁN TRỘN ĐỀ</p></div><hr>"""
-    
-    sorted_codes = sorted(all_exam_data.keys())
-    if not sorted_codes: return b""
-    
-    p1_max = 0; p2_max = 0; p3_max = 0
-    for code in sorted_codes:
-        if len(all_exam_data[code]["P1"]) > p1_max: p1_max = len(all_exam_data[code]["P1"])
-        if len(all_exam_data[code]["P2"]) > p2_max: p2_max = len(all_exam_data[code]["P2"])
-        if len(all_exam_data[code]["P3"]) > p3_max: p3_max = len(all_exam_data[code]["P3"])
-
-    if p1_max > 0:
-        html += "<div class='part-title'>PHẦN I: Trắc nghiệm nhiều lựa chọn</div>"
-        html += "<table><tr><th>Mã đề</th>"
-        for i in range(1, p1_max + 1): html += f"<th>{i}</th>"
-        html += "</tr>"
-        for code in sorted_codes:
-            html += f"<tr><td><b>{code}</b></td>"
-            ans_dict = all_exam_data[code]["P1"]
-            for i in range(1, p1_max + 1): html += f"<td>{ans_dict.get(i, '')}</td>"
-            html += "</tr>"
-        html += "</table>"
-
-    if p2_max > 0:
-        html += "<div class='part-title'>PHẦN II: Trắc nghiệm đúng sai</div>"
-        html += "<table><tr><th>Mã đề</th>"
-        for i in range(1, p2_max + 1): html += f"<th>Câu {i}</th>"
-        html += "</tr>"
-        for code in sorted_codes:
-            html += f"<tr><td><b>{code}</b></td>"
-            ans_dict = all_exam_data[code]["P2"]
-            for i in range(1, p2_max + 1): html += f"<td>{ans_dict.get(i, '')}</td>"
-            html += "</tr>"
-        html += "</table>"
-
-    if p3_max > 0:
-        html += "<div class='part-title'>PHẦN III: Trả lời ngắn</div>"
-        html += "<table><tr><th>Mã đề</th>"
-        for i in range(1, p3_max + 1): html += f"<th>Câu {i}</th>"
-        html += "</tr>"
-        for code in sorted_codes:
-            html += f"<tr><td><b>{code}</b></td>"
-            ans_dict = all_exam_data[code]["P3"]
-            for i in range(1, p3_max + 1): html += f"<td>{ans_dict.get(i, '')}</td>"
-            html += "</tr>"
-        html += "</table>"
+                intro.append(b)
+                
+        correct_char = ""
+        if options:
+            if mode == "MCQ":
+                random.shuffle(options)
+                for i, opt in enumerate(options):
+                    lbl = labels_mcq[i] if i < 4 else "*"
+                    update_label_in_node(opt['node'], lbl)
+                    if opt['correct']: correct_char = lbl[0]
+            elif mode == "TF":
+                random.shuffle(options)
+                for i, opt in enumerate(options):
+                    lbl = labels_tf[i] if i < 4 else "*"
+                    update_label_in_node(opt['node'], lbl)
         
-    html += "</body></html>"
-    return html.encode('utf-8')
+        if intro:
+            update_label_in_node(intro[0], f"Câu {new_idx + 1}.")
+            
+        if mode == "MCQ":
+            key_map[new_idx + 1] = correct_char if correct_char else "X"
+            
+        shuffled_output.extend(intro)
+        for o in options: shuffled_output.extend([o['node']])
+        
+    return shuffled_output, key_map
 
-# ==================== MAIN UI ====================
+def process_docx(file_bytes, num_exams, shuffle_mode):
+    input_io = io.BytesIO(file_bytes)
+    resources = {}
+    xml_content = ""
+    
+    try:
+        with zipfile.ZipFile(input_io, 'r') as zin:
+            for filename in zin.namelist():
+                if filename == "word/document.xml":
+                    xml_content = zin.read(filename).decode('utf-8')
+                else:
+                    resources[filename] = zin.read(filename)
+    except Exception as e:
+        return None, None, [f"Lỗi đọc file: {str(e)}"]
 
+    if not xml_content:
+        return None, None, ["Không tìm thấy nội dung document.xml"]
+
+    # Parse XML gốc
+    dom = minidom.parseString(xml_content)
+    body = dom.getElementsByTagNameNS(W_NS, "body")[0]
+    
+    all_blocks = []
+    for child in list(body.childNodes):
+        if child.nodeType == child.ELEMENT_NODE and child.localName in ["p", "tbl"]:
+            all_blocks.append(child)
+            body.removeChild(child) 
+            
+    errors = check_structure_errors(all_blocks)
+    
+    # Phân chia PHẦN
+    parts = [] 
+    current_part = []
+    for block in all_blocks:
+        txt = get_text_from_node(block)
+        if re.match(r'^\s*PHẦN\s*\d+', txt, re.IGNORECASE):
+            if current_part: parts.append(current_part)
+            current_part = [block]
+        else:
+            current_part.append(block)
+    if current_part: parts.append(current_part)
+    
+    if not parts: parts = [all_blocks]
+
+    output_zip_io = io.BytesIO()
+    excel_data = []
+    
+    with zipfile.ZipFile(output_zip_io, 'w', zipfile.ZIP_DEFLATED) as zout:
+        
+        for ver in range(num_exams):
+            exam_code = f"10{ver+1}"
+            
+            curr_dom = minidom.parseString(xml_content)
+            curr_body = curr_dom.getElementsByTagNameNS(W_NS, "body")[0]
+            while curr_body.firstChild: curr_body.removeChild(curr_body.firstChild)
+            
+            exam_blocks = []
+            exam_key = {"Mã đề": exam_code}
+            global_q_idx = 1
+            
+            for part_blocks in parts:
+                questions = []
+                intro_part = []
+                curr_q = []
+                is_q = False
+                
+                cloned_part_blocks = [b.cloneNode(True) for b in part_blocks]
+                
+                for b in cloned_part_blocks:
+                    txt = get_text_from_node(b)
+                    if re.match(r'^\s*Câu\s*\d+', txt, re.IGNORECASE):
+                        if curr_q: questions.append(curr_q)
+                        curr_q = [b]
+                        is_q = True
+                    elif re.match(r'^\s*PHẦN', txt, re.IGNORECASE):
+                        if curr_q: questions.append(curr_q)
+                        curr_q = []
+                        intro_part.append(b)
+                        is_q = False
+                    else:
+                        if is_q: curr_q.append(b)
+                        else: intro_part.append(b)
+                if curr_q: questions.append(curr_q)
+                
+                # Xác định Mode
+                part_txt = get_text_from_node(intro_part[0]) if intro_part else ""
+                current_mode = "MCQ"
+                if shuffle_mode == "auto":
+                    if "PHẦN 2" in part_txt.upper(): current_mode = "TF"
+                    elif "PHẦN 3" in part_txt.upper(): current_mode = "FILL" # Mode mới cho Phần 3
+                elif shuffle_mode == "tf": current_mode = "TF"
+                
+                # Thực hiện trộn
+                shuffled_q_nodes, key_map = shuffle_questions(questions, mode=current_mode)
+                
+                final_q_nodes = []
+                local_count = 0
+                
+                # Map đáp án
+                for k, v in key_map.items():
+                    exam_key[str(global_q_idx + k - 1)] = v
+                    
+                # Fix lại label Câu X lần cuối cho khớp global index
+                for node in shuffled_q_nodes:
+                    txt = get_text_from_node(node)
+                    if re.match(r'^\s*Câu\s*\d+', txt):
+                        update_label_in_node(node, f"Câu {global_q_idx + local_count}.")
+                        local_count += 1
+                    final_q_nodes.append(node)
+                
+                global_q_idx += len(key_map)
+                exam_blocks.extend(intro_part)
+                exam_blocks.extend(final_q_nodes)
+
+            for b in exam_blocks:
+                curr_body.appendChild(b)
+                
+            new_xml = curr_dom.toxml()
+            
+            sub_io = io.BytesIO()
+            with zipfile.ZipFile(sub_io, 'w', zipfile.ZIP_DEFLATED) as sub_z:
+                sub_z.writestr("word/document.xml", new_xml.encode('utf-8'))
+                for name, content in resources.items():
+                    sub_z.writestr(name, content)
+            
+            zout.writestr(f"De_{exam_code}.docx", sub_io.getvalue())
+            excel_data.append(exam_key)
+            
+    df = pd.DataFrame(excel_data)
+    cols = ["Mã đề"] + sorted([c for c in df.columns if c != "Mã đề"], key=lambda x: int(x) if x.isdigit() else 999)
+    df = df[cols] if not df.empty else df
+    
+    excel_io = io.BytesIO()
+    with pd.ExcelWriter(excel_io, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='DapAn')
+        
+    return output_zip_io.getvalue(), excel_io.getvalue(), errors
+
+# ==================== GIAO DIỆN CHÍNH ====================
 def main():
     st.markdown("""
-    <div class="header-banner">
+    <div class="main-header">
         <h1>TRƯỜNG THPT MINH ĐỨC</h1>
-        <p>APP TRỘN ĐỀ 2025 - PRO VERSION</p>
+        <p>APP TRỘN ĐỀ 2025</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1.5, 1], gap="large")
-    
-    with col1:
-        with st.expander("📄 Hướng dẫn & File Mẫu", expanded=True):
-            col_btn_1, col_btn_2 = st.columns([1, 1])
-            with col_btn_2:
-                file_mau_url = "https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/export?format=docx"
-                st.link_button("📥 Tải File Mẫu", file_mau_url, help="Tải file mẫu chuẩn", type="primary", use_container_width=True)
-            st.success("""
-            **📌 Cấu trúc:**
-            * PHẦN 1: Trắc nghiệm (A. B. C. D.)
-            * PHẦN 2: Đúng/Sai (a) b) c) d))
-            * PHẦN 3: Trả lời ngắn
-            """)
-            st.warning("""
-            **⚠️ Lưu ý:**
-            * Câu hỏi: `Câu 1.`, `Câu 2.`...
-            * Đáp án: **Gạch chân** hoặc **Tô màu**.
-            * Phần 3: Ghi **ĐS: Kết quả** và tô đỏ.
-            """)
-        
-        st.markdown('<div class="step-label"><span class="step-circle">1</span>Upload file gốc</div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Chọn file docx", type=["docx"], label_visibility="collapsed")
-        if uploaded_file: st.success(f"✅ Đã nhận: {uploaded_file.name}")
 
-    with col2:
-        st.markdown('<div class="step-label"><span class="step-circle">2</span>Cấu hình</div>', unsafe_allow_html=True)
-        shuffle_mode = st.radio("Kiểu trộn", options=["auto", "mcq", "tf"], format_func=lambda x: {"auto": "🔄 Tự động", "mcq": "📝 Trắc nghiệm", "tf": "✅ Đúng/Sai"}[x], label_visibility="collapsed")
-        st.markdown('<div style="height: 10px"></div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1: num_versions = st.number_input("Số lượng đề", min_value=1, max_value=50, value=4)
-        with c2: start_code = st.number_input("Mã bắt đầu", value=1001, step=1)
-        st.caption(f"📍 Mã đề: {start_code} ⮕ {start_code + num_versions - 1}")
-        st.markdown('<div style="height: 20px"></div>', unsafe_allow_html=True)
+    col_left, col_right = st.columns([1, 1], gap="large")
+
+    with col_left:
+        with st.expander("📄 Hướng dẫn & File mẫu (Bấm để xem)", expanded=True):
+            st.markdown(f"""
+            <div class="info-box">
+                <div class="info-title">📌 CẤU TRÚC FILE CHUẨN:</div>
+                <p>
+                    <span class="part-label">PHẦN 1:</span> Trắc nghiệm nhiều lựa chọn (A. B. C. D.)<br>
+                    <i>(Trộn cả câu hỏi và phương án)</i>
+                </p>
+                <p>
+                    <span class="part-label">PHẦN 2:</span> Trắc nghiệm Đúng/Sai (a) b) c) d))<br>
+                    <i>(Trộn câu hỏi, trộn ý a,b,c - giữ d cố định)</i>
+                </p>
+                <p>
+                    <span class="part-label">PHẦN 3:</span> Trắc nghiệm trả lời ngắn<br>
+                    <i>(Chỉ trộn thứ tự câu hỏi)</i>
+                </p>
+                
+                <div class="warning-box">
+                    <div class="warning-title">⚠️ QUY ƯỚC ĐÁP ÁN (BẮT BUỘC):</div>
+                    <ul style="margin-bottom: 0; padding-left: 20px;">
+                        <li><b>Quy tắc chung:</b> Bắt đầu câu hỏi bằng <code>Câu 1.</code>, <code>Câu 2.</code>...</li>
+                        <li>
+                            <b>Phần 1 & 2:</b> Đáp án đúng phải <span style="color:red; font-weight:bold">TÔ ĐỎ</span> hoặc <u>GẠCH CHÂN</u>.
+                        </li>
+                        <li>
+                            <b>Phần 3:</b> Ghi <span style="color:red; font-weight:bold">ĐS: Giá trị</span> ở cuối câu và <span style="color:red; font-weight:bold">TÔ ĐỎ</span>.<br>
+                            <i>(Ví dụ: <span style="color:red">ĐS: -5</span> hoặc <span style="color:red">ĐS: 10.5</span>)</i>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            sample_url = "https://docs.google.com/document/d/1mnQqyUqQMRSbhxLDP_E_CswHvHlXziFU/export?format=docx"
+            st.link_button("📥 Tải File Mẫu (Google Docs)", sample_url, use_container_width=True)
+
+        st.markdown('<div class="step-header"><span class="step-circle">1</span> Chọn file đề Word (*.docx)</div>', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("", type=["docx"], label_visibility="collapsed")
         
-        if st.button("🚀 Trộn đề & Tạo đáp án", type="primary", use_container_width=True):
+        if not uploaded_file:
+            st.markdown("""
+            <div class="upload-container">
+                <div style="font-size: 20px;">☁️</div>
+                <div style="font-weight: bold;">Drag and drop file here</div>
+                <div style="color: #999; font-size: 12px;">Limit 200MB per file • DOCX</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.success(f"✅ Đã tải lên: {uploaded_file.name}")
+
+        st.button("● Kiểm tra cấu trúc & lỗi", type="primary")
+
+    with col_right:
+        st.markdown('<div class="step-header"><span class="step-circle">2</span> Chọn kiểu trộn</div>', unsafe_allow_html=True)
+        shuffle_opt = st.radio(
+            "",
+            ["Tự động (Phần 1, 2, 3)", "Trắc nghiệm", "Đúng/Sai"],
+            index=0,
+            label_visibility="collapsed"
+        )
+        mode_map = {"Tự động (Phần 1, 2, 3)": "auto", "Trắc nghiệm": "mcq", "Đúng/Sai": "tf"}
+        selected_mode = mode_map[shuffle_opt]
+
+        st.markdown("---")
+
+        st.markdown('<div class="step-header"><span class="step-circle">3</span> Số mã đề cần tạo</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns([2, 3])
+        with c1:
+            num_exams = st.number_input("", min_value=1, max_value=50, value=4)
+        with c2:
+            st.markdown("<div style='padding-top: 10px; color:#666; font-size:13px'>● 1 mã → File Word<br>● Nhiều mã → File ZIP</div>", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        if st.button("🚀 Trộn đề & Tải xuống", type="primary"):
             if not uploaded_file:
-                st.error("Chưa chọn file!")
+                st.markdown(f'<div class="error-msg">⚠️ Vui lòng chọn file đề Word trước!</div>', unsafe_allow_html=True)
             else:
-                try:
-                    with st.spinner("Đang xử lý (Fix lỗi dính chữ)..."):
-                        original_bytes = uploaded_file.read()
+                with st.spinner("⏳ Đang xử lý..."):
+                    try:
+                        file_bytes = uploaded_file.read()
                         uploaded_file.seek(0)
-                        base_name = uploaded_file.name.replace(".docx", "")
-                        zip_buffer = io.BytesIO()
-                        all_exam_data = {}
-                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
-                            for i in range(num_versions):
-                                code = start_code + i
-                                new_docx, answers = process_full_docx(original_bytes, str(code))
-                                fname = f"{base_name}_MaDe_{code}.docx"
-                                zout.writestr(fname, new_docx)
-                                all_exam_data[code] = answers
-                            key_docx_bytes = generate_answer_key_doc(all_exam_data)
-                            zout.writestr(f"DAP_AN_CHITIET_{base_name}.doc", key_docx_bytes)
-                        final_zip = zip_buffer.getvalue()
-                    st.success("Thành công! Tải về bên dưới:")
-                    st.download_button(label="📥 Tải trọn bộ (ZIP)", data=final_zip, file_name=f"TronDe_{base_name}_Full.zip", mime="application/zip", type="primary")
-                except Exception as e:
-                    st.error(f"Lỗi: {str(e)}")
-                    st.exception(e)
+                        
+                        zip_data, excel_data, errors = process_docx(file_bytes, num_exams, selected_mode)
+                        
+                        if errors:
+                            for e in errors:
+                                st.markdown(f'<div class="error-msg">{e}</div>', unsafe_allow_html=True)
+                        
+                        if zip_data:
+                            col_dl1, col_dl2 = st.columns(2)
+                            with col_dl1:
+                                st.download_button(
+                                    label="📦 Tải Đề (ZIP/Docx)",
+                                    data=zip_data,
+                                    file_name=f"Bo_De_Thi.zip",
+                                    mime="application/zip",
+                                    type="primary"
+                                )
+                            with col_dl2:
+                                st.download_button(
+                                    label="📊 Tải Đáp Án (Excel)",
+                                    data=excel_data,
+                                    file_name="Dap_An.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                            st.balloons()
+                            
+                    except Exception as e:
+                         st.markdown(f'<div class="error-msg">Lỗi xử lý: {str(e)}</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="footer">
+        © 2025 Phan Trường Duy - THPT Minh Đức<br>
+        Hệ thống quản lý trộn đề thi trắc nghiệm
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
