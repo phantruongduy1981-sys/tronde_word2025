@@ -33,12 +33,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC XỬ LÝ XML (CORE - FIX LỖI) ====================
+# ==================== LOGIC XỬ LÝ XML (CORE) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 def get_full_text_from_paragraph(paragraph):
-    """Lấy toàn bộ text của đoạn văn để regex matching"""
     texts = []
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     for t in t_nodes:
@@ -47,7 +46,7 @@ def get_full_text_from_paragraph(paragraph):
     return "".join(texts)
 
 def check_is_marked_answer(block):
-    """Kiểm tra dấu hiệu đáp án"""
+    """Kiểm tra dấu hiệu đáp án (Dùng cho P2, P3)"""
     runs = block.getElementsByTagNameNS(W_NS, "r")
     for r in runs:
         rPr_list = r.getElementsByTagNameNS(W_NS, "rPr")
@@ -72,7 +71,7 @@ def check_is_marked_answer(block):
     return False
 
 def remove_answer_formatting(block):
-    """Xóa định dạng đáp án"""
+    """Xóa định dạng đáp án (Dùng cho P2, P3)"""
     runs = block.getElementsByTagNameNS(W_NS, "r")
     for r in runs:
         rPr_list = r.getElementsByTagNameNS(W_NS, "rPr")
@@ -84,7 +83,7 @@ def remove_answer_formatting(block):
                 rPr.removeChild(node)
 
 def clean_short_answer_content(block):
-    """Xử lý phần 3: Lấy đáp án và Xóa text 'ĐS:...' an toàn"""
+    """Xử lý phần 3: Lấy đáp án và Xóa text 'ĐS:...' giữ khoảng trắng"""
     runs = block.getElementsByTagNameNS(W_NS, "r")
     full_text = get_full_text_from_paragraph(block)
     
@@ -98,17 +97,14 @@ def clean_short_answer_content(block):
             for t in t_nodes:
                 if t.firstChild and t.firstChild.nodeValue:
                     val = t.firstChild.nodeValue
-                    # Chỉ xóa đúng phần ĐS, giữ nguyên khoảng trắng nếu có
                     if re.search(r'(ĐS|Đáp số|DS)', val, re.IGNORECASE):
                         m_part = re.search(r'(.*?)(ĐS|Đáp số|DS)', val, re.IGNORECASE)
                         if m_part:
                             t.firstChild.nodeValue = m_part.group(1)
-                            # QUAN TRỌNG: Giữ space
                             t.setAttribute("xml:space", "preserve") 
     return found_answer
 
 def style_run_blue_bold(run):
-    """Tô đậm xanh cho run chứa label"""
     doc = run.ownerDocument
     rPr_list = run.getElementsByTagNameNS(W_NS, "rPr")
     if rPr_list: rPr = rPr_list[0]
@@ -128,7 +124,8 @@ def style_run_blue_bold(run):
 
 def update_label_smart(paragraph, regex_pattern, new_label_text):
     """
-    CẬP NHẬT LABEL THÔNG MINH (FIX DÍNH CHỮ & FIX 'B..')
+    CẬP NHẬT NHÃN THÔNG MINH (Dùng để đánh lại số Câu 1, Câu 2...)
+    Giữ nguyên khoảng trắng bằng xml:space="preserve"
     """
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     if not t_nodes: return False
@@ -140,38 +137,23 @@ def update_label_smart(paragraph, regex_pattern, new_label_text):
         
         m = re.match(regex_pattern, txt, re.IGNORECASE)
         if m:
-            # Lấy phần text gốc khớp với regex
             original_match = m.group(0)
-            
-            # Tính toán phần dư (text phía sau nhãn)
             remaining_text = txt[len(original_match):]
             
-            # Nếu regex không bắt được khoảng trắng sau dấu chấm, ta phải tự thêm vào nếu bản gốc có
-            # Tuy nhiên, để an toàn nhất: Ta thay thế chính xác cụm tìm được.
-            # Ví dụ: Tìm thấy "A. " -> Thay bằng "B. "
+            # Cập nhật text mới
+            t.firstChild.nodeValue = new_label_text + remaining_text
             
-            # Logic mới: new_label_text truyền vào là "B." (chưa có space).
-            # Ta cần kiểm tra xem original_match có space cuối không.
-            trailing_space = ""
-            if original_match and original_match[-1] == " ":
-                trailing_space = " "
-            
-            # Cập nhật giá trị: Label Mới + Space cũ (nếu có) + Phần dư
-            t.firstChild.nodeValue = new_label_text + trailing_space + remaining_text
-            
-            # === KHẮC PHỤC DÍNH CHỮ: BẮT BUỘC THÊM xml:space="preserve" ===
+            # FIX LỖI DÍNH CHỮ: Bắt buộc thêm thuộc tính này
             t.setAttribute("xml:space", "preserve")
             
             run = t.parentNode
             if run and run.localName == "r": style_run_blue_bold(run)
             
-            # Dọn dẹp các node rác ngay sau (dấu chấm/ngoặc thừa do Word tách run)
+            # Xóa rác (dấu chấm/ngoặc thừa) nếu có, nhưng không xóa khoảng trắng
             for j in range(i + 1, len(t_nodes)):
                 t2 = t_nodes[j]
                 if t2.firstChild and t2.firstChild.nodeValue:
                     val = t2.firstChild.nodeValue
-                    # Chỉ xóa nếu node đó CHỈ CHỨA dấu chấm hoặc ngoặc (rác).
-                    # TUYỆT ĐỐI KHÔNG XÓA nếu có khoảng trắng (\s)
                     if re.match(r'^[\.\)]+$', val): 
                         t2.firstChild.nodeValue = ""
                     else:
@@ -190,61 +172,16 @@ def shuffle_array(arr):
 # --- XỬ LÝ TỪNG LOẠI CÂU HỎI ---
 
 def process_mcq_question(question_blocks):
-    options = []
-    others = []
-    option_indices = []
-    
-    # === FIX LỖI NHẬN DIỆN "CÂU" THÀNH "C." ===
-    # Regex cũ: r'^\s*[A-D][\.\)]?' (Dấu chấm tùy chọn -> Sai lầm tai hại)
-    # Regex mới: Bắt buộc có dấu chấm hoặc ngoặc. 
-    # Lookahead (?!Câu) để đảm bảo không bắt chữ "Câu" (bắt đầu bằng C)
-    
-    label_regex = r'^\s*(?!Câu)(?:[A-D]|[a-d])[\.\)]' 
-    
-    for i, block in enumerate(question_blocks):
-        txt = get_full_text_from_paragraph(block)
-        # Kiểm tra kỹ: Phải khớp regex VÀ không được bắt đầu bằng chữ "Câu"
-        if re.match(label_regex, txt, re.IGNORECASE) and not txt.strip().lower().startswith("câu"):
-            options.append(block)
-            option_indices.append(i)
-        else:
-            others.append(block)
-            
-    if len(options) < 2: return question_blocks, ""
-    
-    correct_original_idx = -1
-    for idx, opt in enumerate(options):
-        if check_is_marked_answer(opt):
-            correct_original_idx = idx
-            break
-            
-    for opt in options: remove_answer_formatting(opt)
-        
-    tagged_options = []
-    for idx, opt in enumerate(options):
-        is_correct = (idx == correct_original_idx)
-        tagged_options.append((opt, is_correct))
-    shuffled_tagged = shuffle_array(tagged_options)
-    shuffled_blocks = [x[0] for x in shuffled_tagged]
-    
-    new_correct_char = ""
-    chars = ["A", "B", "C", "D"]
-    for idx, (opt, is_correct) in enumerate(shuffled_tagged):
-        if is_correct:
-            new_correct_char = chars[idx] if idx < 4 else "?"
-            
-    for idx, block in enumerate(shuffled_blocks):
-        lbl = chars[idx] if idx < 4 else chars[-1]
-        # Regex update cũng phải khớp chính xác để không sửa nhầm
-        update_label_smart(block, label_regex, f"{lbl}.")
-        
-    min_idx, max_idx = min(option_indices), max(option_indices)
-    final_blocks = question_blocks[:min_idx] + shuffled_blocks + question_blocks[max_idx+1:]
-    return final_blocks, new_correct_char
+    """
+    PHẦN 1: CHỈ TRẢ VỀ NGUYÊN BẢN (KHÔNG TRỘN A,B,C,D - KHÔNG XÓA ĐÁP ÁN)
+    Giữ nguyên định dạng gốc, chỉ phục vụ việc đảo thứ tự câu hỏi ở vòng ngoài.
+    """
+    # Trả về block gốc và đáp án rỗng (vì không tạo bảng đáp án P1)
+    return question_blocks, "" 
 
 def process_tf_question(question_blocks):
+    """PHẦN 2: Trộn a/b/c giữ d, xóa đáp án, lấy đáp án ra bảng (Logic cũ ok)"""
     opt_map = {}
-    # Bắt buộc có dấu chấm hoặc ngoặc )
     label_regex = r'^\s*([a-d])[\.\)]'
     
     for i, block in enumerate(question_blocks):
@@ -285,6 +222,7 @@ def process_tf_question(question_blocks):
     return final_blocks, final_ans_str
 
 def process_short_ans_question(question_blocks):
+    """PHẦN 3: Lấy đáp án và xóa dòng ĐS (Logic cũ ok)"""
     answer_val = ""
     for block in question_blocks:
         extracted = clean_short_answer_content(block)
@@ -298,7 +236,7 @@ def parse_questions_in_range(blocks, start, end):
     intro = []
     questions = []
     i = 0
-    # Regex nhận diện câu hỏi: Bắt buộc có số
+    # Regex nhận diện câu hỏi: Chấp nhận mọi kiểu "Câu 1.", "Câu 1:", "Câu 1"
     q_regex = r'^Câu\s*\d+'
     
     while i < len(part_blocks):
@@ -357,7 +295,8 @@ def process_full_docx(file_bytes, code_name):
         
         for idx, (q_blks, ans) in enumerate(shuffled_qs_with_ans):
             if q_blks:
-                # Update "Câu X" - Cũng dùng hàm smart để giữ format
+                # Chỉ đánh lại số thứ tự câu (Câu 1, Câu 2...)
+                # Regex này an toàn, chỉ bắt chữ Câu ở đầu dòng
                 update_label_smart(q_blks[0], r'^(\s*)(Câu\s*)(\d+)(\s*[\.:])?', f"Câu {idx+1}.")
             final_part_blocks.extend(q_blks)
             exam_answers[f"P{part_type}"][idx+1] = ans
@@ -402,7 +341,7 @@ def process_full_docx(file_bytes, code_name):
                 zout.writestr(item, zin.read(item.filename))
     return out_io.getvalue(), exam_answers
 
-# --- TẠO FILE ĐÁP ÁN ---
+# --- TẠO FILE ĐÁP ÁN (CHỈ P2 VÀ P3) ---
 def generate_answer_key_doc(all_exam_data):
     html = """<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Đáp Án</title><style>body { font-family: 'Times New Roman', serif; font-size: 12pt; } table { border-collapse: collapse; width: 100%; margin-bottom: 20px; } th, td { border: 1px solid black; padding: 5px; text-align: center; } th { background-color: #f2f2f2; font-weight: bold; } h2, h3 { text-align: center; margin: 10px 0; color: #003366; } .part-title { font-weight: bold; margin-top: 20px; color: #003366; }</style></head><body>"""
     html += """<div style='text-align:center; font-weight:bold;'><p style='font-size:14pt; margin:0'>TRƯỜNG THPT MINH ĐỨC</p><p style='margin:0'>BẢNG ĐÁP ÁN TRỘN ĐỀ</p></div><hr>"""
@@ -410,23 +349,13 @@ def generate_answer_key_doc(all_exam_data):
     sorted_codes = sorted(all_exam_data.keys())
     if not sorted_codes: return b""
     
-    p1_max = 0; p2_max = 0; p3_max = 0
+    # Bỏ qua P1_max vì không in P1
+    p2_max = 0; p3_max = 0
     for code in sorted_codes:
-        if len(all_exam_data[code]["P1"]) > p1_max: p1_max = len(all_exam_data[code]["P1"])
         if len(all_exam_data[code]["P2"]) > p2_max: p2_max = len(all_exam_data[code]["P2"])
         if len(all_exam_data[code]["P3"]) > p3_max: p3_max = len(all_exam_data[code]["P3"])
 
-    if p1_max > 0:
-        html += "<div class='part-title'>PHẦN I: Trắc nghiệm nhiều lựa chọn</div>"
-        html += "<table><tr><th>Mã đề</th>"
-        for i in range(1, p1_max + 1): html += f"<th>{i}</th>"
-        html += "</tr>"
-        for code in sorted_codes:
-            html += f"<tr><td><b>{code}</b></td>"
-            ans_dict = all_exam_data[code]["P1"]
-            for i in range(1, p1_max + 1): html += f"<td>{ans_dict.get(i, '')}</td>"
-            html += "</tr>"
-        html += "</table>"
+    # Không in bảng Phần 1
 
     if p2_max > 0:
         html += "<div class='part-title'>PHẦN II: Trắc nghiệm đúng sai</div>"
@@ -475,15 +404,15 @@ def main():
                 st.link_button("📥 Tải File Mẫu", file_mau_url, help="Tải file mẫu chuẩn", type="primary", use_container_width=True)
             st.success("""
             **📌 Cấu trúc:**
-            * PHẦN 1: Trắc nghiệm (A. B. C. D.)
-            * PHẦN 2: Đúng/Sai (a) b) c) d))
-            * PHẦN 3: Trả lời ngắn
+            * PHẦN 1: Trắc nghiệm (Giữ nguyên đáp án gạch chân/tô màu).
+            * PHẦN 2: Đúng/Sai (Trộn a,b,c giữ d).
+            * PHẦN 3: Trả lời ngắn (Tự động lấy đáp án).
             """)
             st.warning("""
-            **⚠️ Lưu ý:**
-            * Câu hỏi: `Câu 1.`, `Câu 2.`...
-            * Đáp án: **Gạch chân** hoặc **Tô màu**.
-            * Phần 3: Ghi **ĐS: Kết quả** và tô đỏ.
+            **⚠️ Chế độ An Toàn:**
+            * Phần 1 sẽ **giữ nguyên thứ tự A,B,C,D** và định dạng đáp án để tránh lỗi.
+            * Chỉ đảo thứ tự câu hỏi ở Phần 1.
+            * Không tạo bảng đáp án cho Phần 1 (Giáo viên xem trực tiếp trên file đề).
             """)
         
         st.markdown('<div class="step-label"><span class="step-circle">1</span>Upload file gốc</div>', unsafe_allow_html=True)
@@ -505,7 +434,7 @@ def main():
                 st.error("Chưa chọn file!")
             else:
                 try:
-                    with st.spinner("Đang xử lý (Fix dính chữ & Nhận diện Câu)..."):
+                    with st.spinner("Đang xử lý (Chế độ An Toàn - Giữ Format)..."):
                         original_bytes = uploaded_file.read()
                         uploaded_file.seek(0)
                         base_name = uploaded_file.name.replace(".docx", "")
