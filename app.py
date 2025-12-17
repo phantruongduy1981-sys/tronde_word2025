@@ -1,8 +1,3 @@
-"""
-Trộn Đề Word Online - AIOMT Premium
-Streamlit App - Deploy miễn phí trên Streamlit Cloud
-"""
-
 import streamlit as st
 import re
 import random
@@ -13,8 +8,8 @@ from xml.dom import minidom
 # ==================== CẤU HÌNH TRANG ====================
 
 st.set_page_config(
-    page_title="Trộn Đề Word - AIOMT Premium",
-    page_icon="🎲",
+    page_title="Trộn Đề Word - THPT Minh Đức",
+    page_icon="🏫",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
@@ -27,13 +22,17 @@ st.markdown("""
         padding: 1rem 0;
     }
     .main-header h1 {
-        color: #0d9488;
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
+        color: #d93025; /* Màu đỏ mận cho tên trường */
+        font-size: 1.8rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 0.2rem;
     }
-    .main-header p {
-        color: #666;
-        font-size: 1rem;
+    .main-header h2 {
+        color: #0d9488;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-top: 0;
     }
     .stButton > button {
         width: 100%;
@@ -66,18 +65,19 @@ st.markdown("""
     }
     .footer {
         text-align: center;
-        color: #888;
+        color: #666;
         padding: 2rem 0 1rem 0;
-        font-size: 0.85rem;
+        border-top: 1px solid #eee;
+        margin-top: 2rem;
+        font-size: 0.9rem;
     }
-    .footer a {
+    .footer strong {
         color: #0d9488;
-        text-decoration: none;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC TRỘN ĐỀ ====================
+# ==================== LOGIC TRỘN ĐỀ (GIỮ NGUYÊN) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -554,14 +554,17 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
         return output_buffer.getvalue()
 
 
-def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode):
-    """Tạo ZIP chứa nhiều mã đề"""
+# CẬP NHẬT: Thêm tham số start_code
+def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start_code):
+    """Tạo ZIP chứa nhiều mã đề với mã bắt đầu tùy chỉnh"""
     zip_buffer = io.BytesIO()
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
         for i in range(num_versions):
             shuffled = shuffle_docx(file_bytes, shuffle_mode)
-            filename = f"{base_name}_V{i + 1}.docx"
+            # CẬP NHẬT: Tên file theo mã đề bắt đầu
+            current_code = start_code + i
+            filename = f"{base_name}_{current_code}.docx"
             zout.writestr(filename, shuffled)
     
     return zip_buffer.getvalue()
@@ -570,16 +573,17 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode):
 # ==================== GIAO DIỆN STREAMLIT ====================
 
 def main():
-    # Header
+    # Header - CẬP NHẬT THEO YÊU CẦU
     st.markdown("""
     <div class="main-header">
-        <h1>🎲 Trộn Đề Word</h1>
-        <p>Giữ nguyên <strong>Mathtype</strong>, <strong>OLE</strong>, <strong>định dạng</strong> • Miễn phí 100%</p>
+        <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
+        <h2>ỨNG DỤNG TRỘN ĐỀ WORD 2025</h2>
     </div>
     """, unsafe_allow_html=True)
     
     # Hướng dẫn
     with st.expander("📋 Hướng dẫn & Cấu trúc file", expanded=False):
+        # ĐÃ CẬP NHẬT LINK FILE MẪU MỚI TẠI ĐÂY
         st.markdown("""
         **Cấu trúc file Word chuẩn:**
         
@@ -593,7 +597,7 @@ def main():
         - Phương án Đúng/Sai: `a)` `b)` `c)` `d)` (viết thường + dấu ngoặc)
         - Đáp án có thể **gạch chân** hoặc **tô màu** – sẽ được giữ nguyên
         
-        📥 [Tải file mẫu](https://drive.google.com/file/d/1_2zhqxwoMQ-AINMfCqy6QbZyGU4Skg3n/view)
+        📥 [Tải file mẫu](https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true)
         """)
     
     st.divider()
@@ -628,26 +632,33 @@ def main():
     
     st.divider()
     
-    # 3. Số mã đề
-    st.subheader("3️⃣ Số mã đề cần tạo")
+    # 3. Số mã đề & Mã đề bắt đầu (CẬP NHẬT)
+    st.subheader("3️⃣ Cấu hình mã đề")
     
-    col1, col2 = st.columns([1, 3])
+    col1, col2 = st.columns(2)
     with col1:
         num_versions = st.number_input(
-            "Số mã đề",
+            "Số lượng mã đề cần tạo",
             min_value=1,
-            max_value=20,
+            max_value=50,
             value=4,
-            step=1,
-            label_visibility="collapsed"
+            step=1
         )
     with col2:
-        st.markdown(f"""
-        <div style="padding-top: 8px; color: #666;">
-            {"📄 Xuất 1 file Word" if num_versions == 1 else f"📦 Xuất file ZIP chứa {num_versions} mã đề"}
-        </div>
-        """, unsafe_allow_html=True)
+        start_code = st.number_input(
+            "Mã đề bắt đầu (Ví dụ: 101)",
+            min_value=0,
+            value=101,
+            step=1
+        )
     
+    # Hiển thị thông tin tóm tắt
+    if num_versions == 1:
+        st.info(f"📄 Sẽ tạo ra **1 đề** với mã số: **{start_code}**")
+    else:
+        end_code = start_code + num_versions - 1
+        st.info(f"📦 Sẽ tạo ra **{num_versions} đề** với các mã số từ: **{start_code}** đến **{end_code}**")
+
     st.divider()
     
     # 4. Nút trộn đề
@@ -666,14 +677,14 @@ def main():
                         base_name = "De"
                     
                     if num_versions == 1:
-                        # Xuất 1 file
+                        # Xuất 1 file nhưng vẫn dùng mã đề tùy chọn
                         result = shuffle_docx(file_bytes, shuffle_mode)
-                        filename = f"{base_name}_V1.docx"
+                        filename = f"{base_name}_{start_code}.docx"
                         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     else:
-                        # Xuất ZIP
-                        result = create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode)
-                        filename = f"{base_name}_multi.zip"
+                        # Xuất ZIP với mã đề tùy chọn
+                        result = create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start_code)
+                        filename = f"{base_name}_From_{start_code}.zip"
                         mime = "application/zip"
                 
                 st.markdown("""
@@ -693,14 +704,11 @@ def main():
             except Exception as e:
                 st.error(f"❌ Lỗi: {str(e)}")
     
-    # Footer
+    # Footer - CẬP NHẬT THEO YÊU CẦU
     st.markdown("""
     <div class="footer">
-        <p>© 2024 <strong>Nguyễn Hữu Phúc</strong> - <a href="https://aiomtpremium.com" target="_blank">AIOMT Premium</a></p>
-        <p>
-            <a href="https://facebook.com/nhphuclk" target="_blank">Facebook</a> • 
-            <a href="https://zalo.me/0985692879" target="_blank">Zalo: 0985692879</a>
-        </p>
+        <p><strong>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</strong></p>
+        <p>Zalo hỗ trợ: <strong>038994070</strong></p>
     </div>
     """, unsafe_allow_html=True)
 
