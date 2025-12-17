@@ -14,70 +14,98 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS
+# Custom CSS - Đã chỉnh sửa giao diện theo yêu cầu mới
 st.markdown("""
 <style>
-    .main-header {
+    /* 1. Tùy chỉnh khung chứa tiêu đề (Header Card) */
+    .header-card {
+        background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%); /* Màu trắng chuyển sang xanh nhạt bóng */
+        border: 2px solid #brent;
+        border-radius: 20px; /* Bo tròn */
+        padding: 15px 10px;
         text-align: center;
-        padding: 1rem 0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Đổ bóng nhẹ */
+        margin-bottom: 10px;
     }
-    .main-header h1 {
-        color: #d93025; /* Màu đỏ mận cho tên trường */
-        font-size: 1.8rem;
-        font-weight: bold;
+    
+    /* Dòng 1: Tên trường - Tăng 50% kích thước */
+    .header-card h1 {
+        color: #d93025; 
+        font-size: 2.7rem !important; /* Tăng kích thước lớn */
+        font-weight: 900;
         text-transform: uppercase;
-        margin-bottom: 0.2rem;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1.2;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
-    .main-header h2 {
+    
+    /* Dòng 2: Tên ứng dụng - Kít lại với dòng 1 */
+    .header-card h2 {
         color: #0d9488;
-        font-size: 1.5rem;
+        font-size: 1.5rem !important;
         font-weight: bold;
-        margin-top: 0;
+        margin: 5px 0 0 0 !important; /* Cách dòng trên chỉ 5px */
+        padding: 0 !important;
     }
+
+    /* 2. Tùy chỉnh vùng Hướng dẫn (Instruction Box) */
+    .instruction-container {
+        background-color: #f8fafc; /* Màu nền xám xanh nhẹ */
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 0px;
+        font-size: 0.95rem;
+    }
+    .instruction-container strong {
+        color: #0369a1;
+    }
+
+    /* 3. Làm các thẻ kít lại (Giảm khoảng cách toàn trang) */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 1rem !important;
+    }
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.5rem !important; /* Khoảng cách giữa các element chỉ còn 0.5rem */
+    }
+    
+    /* Style cho nút bấm đẹp hơn */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
         color: white;
         border: none;
-        padding: 0.75rem 1.5rem;
+        padding: 0.6rem 1.5rem;
         font-size: 1.1rem;
         font-weight: bold;
         border-radius: 10px;
-        transition: all 0.3s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     .stButton > button:hover {
         background: linear-gradient(90deg, #0f766e, #0d9488);
-        box-shadow: 0 4px 15px rgba(13, 148, 136, 0.4);
+        transform: translateY(-1px);
     }
-    .info-box {
-        background: #f0fdfa;
-        border: 1px solid #99f6e4;
-        border-radius: 10px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    .success-box {
-        background: #ecfdf5;
-        border: 1px solid #6ee7b7;
-        border-radius: 10px;
-        padding: 1rem;
-        text-align: center;
-    }
+
+    /* Footer */
     .footer {
         text-align: center;
         color: #666;
-        padding: 2rem 0 1rem 0;
-        border-top: 1px solid #eee;
-        margin-top: 2rem;
-        font-size: 0.9rem;
+        padding: 1rem 0;
+        border-top: 1px dashed #ccc;
+        margin-top: 1rem;
+        font-size: 0.85rem;
     }
-    .footer strong {
-        color: #0d9488;
+    
+    /* Ẩn bớt khoảng trắng mặc định của Streamlit */
+    hr {
+        margin: 0.5em 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC TRỘN ĐỀ (GIỮ NGUYÊN) ====================
+# ==================== LOGIC TRỘN ĐỀ (GIỮ NGUYÊN ĐẦY ĐỦ) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -554,7 +582,6 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
         return output_buffer.getvalue()
 
 
-# CẬP NHẬT: Thêm tham số start_code
 def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start_code):
     """Tạo ZIP chứa nhiều mã đề với mã bắt đầu tùy chỉnh"""
     zip_buffer = io.BytesIO()
@@ -562,7 +589,7 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
         for i in range(num_versions):
             shuffled = shuffle_docx(file_bytes, shuffle_mode)
-            # CẬP NHẬT: Tên file theo mã đề bắt đầu
+            # Tên file theo mã đề bắt đầu
             current_code = start_code + i
             filename = f"{base_name}_{current_code}.docx"
             zout.writestr(filename, shuffled)
@@ -573,145 +600,98 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
 # ==================== GIAO DIỆN STREAMLIT ====================
 
 def main():
-    # Header - CẬP NHẬT THEO YÊU CẦU
+    # Header MỚI - Thẻ bóng, bo tròn, tiêu đề lớn
     st.markdown("""
-    <div class="main-header">
+    <div class="header-card">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
         <h2>ỨNG DỤNG TRỘN ĐỀ WORD 2025</h2>
     </div>
     """, unsafe_allow_html=True)
     
-    # Hướng dẫn
-    with st.expander("📋 Hướng dẫn & Cấu trúc file", expanded=False):
-        # ĐÃ CẬP NHẬT LINK FILE MẪU MỚI TẠI ĐÂY
+    # Hướng dẫn MỚI - Có nền màu
+    with st.expander("📋 Hướng dẫn & Cấu trúc file (Nhấn để xem)", expanded=False):
         st.markdown("""
-        **Cấu trúc file Word chuẩn:**
-        
-        - **PHẦN 1:** Trắc nghiệm (A. B. C. D.) – Trộn câu hỏi + phương án
-        - **PHẦN 2:** Đúng/Sai (a) b) c) d)) – Trộn câu hỏi + trộn a,b,c (giữ d cố định)
-        - **PHẦN 3:** Trả lời ngắn – Chỉ trộn thứ tự câu hỏi
-        
-        **Quy tắc:**
-        - Mỗi câu bắt đầu bằng `Câu 1.`, `Câu 2.`...
-        - Phương án MCQ: `A.` `B.` `C.` `D.` (viết hoa + dấu chấm)
-        - Phương án Đúng/Sai: `a)` `b)` `c)` `d)` (viết thường + dấu ngoặc)
-        - Đáp án có thể **gạch chân** hoặc **tô màu** – sẽ được giữ nguyên
-        
-        📥 [Tải file mẫu](https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true)
-        """)
-    
-    st.divider()
+        <div class="instruction-container">
+            <strong>Cấu trúc file Word chuẩn:</strong>
+            <ul>
+                <li><strong>PHẦN 1:</strong> Trắc nghiệm (A. B. C. D.) – Trộn câu hỏi + phương án</li>
+                <li><strong>PHẦN 2:</strong> Đúng/Sai (a) b) c) d)) – Trộn câu hỏi + trộn a,b,c (giữ d cố định)</li>
+                <li><strong>PHẦN 3:</strong> Trả lời ngắn – Chỉ trộn thứ tự câu hỏi</li>
+            </ul>
+            <strong>Quy tắc & Đáp án:</strong>
+            <ul>
+                <li>Mỗi câu bắt đầu bằng <code>Câu 1.</code>, <code>Câu 2.</code>...</li>
+                <li>Phương án MCQ: <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code> (viết hoa + dấu chấm)</li>
+                <li>Phương án Đúng/Sai: <code>a)</code> <code>b)</code> <code>c)</code> <code>d)</code> (viết thường + dấu ngoặc)</li>
+                <li><strong>Đáp án Phần 1 & 2:</strong> Gạch chân hoặc tô màu đáp án đúng.</li>
+                <li><strong>Đáp án Phần 3:</strong> Ghi đáp án/lời giải ngay sau câu hỏi. Có thể tô màu/gạch chân để làm nổi bật.</li>
+            </ul>
+            <p style="margin-top: 10px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # 1. Upload file
-    st.subheader("1️⃣ Chọn file đề Word")
-    uploaded_file = st.file_uploader(
-        "Kéo thả hoặc click để chọn file .docx",
-        type=["docx"],
-        help="Chỉ chấp nhận file Word (.docx)"
-    )
+    uploaded_file = st.file_uploader("1️⃣ Chọn file đề Word (.docx)", type=["docx"])
     
     if uploaded_file:
         st.success(f"✅ Đã chọn: **{uploaded_file.name}**")
     
-    st.divider()
-    
     # 2. Kiểu trộn
-    st.subheader("2️⃣ Kiểu trộn")
-    
     shuffle_mode = st.radio(
-        "Chọn kiểu trộn phù hợp với đề của bạn:",
+        "2️⃣ Kiểu trộn:",
         options=["auto", "mcq", "tf"],
         format_func=lambda x: {
-            "auto": "🔄 Tự động (phát hiện PHẦN 1, 2, 3)",
-            "mcq": "📝 Trắc nghiệm (toàn bộ là A. B. C. D.)",
-            "tf": "✅ Đúng/Sai (toàn bộ là a) b) c) d))"
+            "auto": "🔄 Tự động (Theo Phần)",
+            "mcq": "📝 Trắc nghiệm (Toàn bộ)",
+            "tf": "✅ Đúng/Sai (Toàn bộ)"
         }[x],
         horizontal=True,
         index=0
     )
     
-    st.divider()
-    
-    # 3. Số mã đề & Mã đề bắt đầu (CẬP NHẬT)
-    st.subheader("3️⃣ Cấu hình mã đề")
-    
+    # 3. Số mã đề
     col1, col2 = st.columns(2)
     with col1:
-        num_versions = st.number_input(
-            "Số lượng mã đề cần tạo",
-            min_value=1,
-            max_value=50,
-            value=4,
-            step=1
-        )
+        num_versions = st.number_input("3️⃣ Số lượng đề:", min_value=1, max_value=50, value=4)
     with col2:
-        start_code = st.number_input(
-            "Mã đề bắt đầu (Ví dụ: 101)",
-            min_value=0,
-            value=101,
-            step=1
-        )
+        start_code = st.number_input("#️⃣ Mã bắt đầu:", min_value=0, value=101)
     
-    # Hiển thị thông tin tóm tắt
-    if num_versions == 1:
-        st.info(f"📄 Sẽ tạo ra **1 đề** với mã số: **{start_code}**")
+    if num_versions > 1:
+        st.caption(f"📦 Tạo {num_versions} đề từ mã {start_code} đến {start_code + num_versions - 1}")
     else:
-        end_code = start_code + num_versions - 1
-        st.info(f"📦 Sẽ tạo ra **{num_versions} đề** với các mã số từ: **{start_code}** đến **{end_code}**")
+        st.caption(f"📄 Tạo 1 đề mã {start_code}")
 
-    st.divider()
-    
-    # 4. Nút trộn đề
-    if st.button("🎲 Trộn đề & Tải xuống", type="primary", use_container_width=True):
+    # 4. Nút trộn đề (Dùng CSS để tạo khoảng cách kít lại nên không dùng divider)
+    if st.button("🎲 TRỘN ĐỀ NGAY", type="primary", use_container_width=True):
         if not uploaded_file:
-            st.error("⚠️ Vui lòng chọn file Word trước!")
+            st.error("⚠️ Chưa chọn file!")
         else:
             try:
-                with st.spinner("⏳ Đang xử lý..."):
+                with st.spinner("🚀 Đang xử lý..."):
                     file_bytes = uploaded_file.read()
-                    base_name = uploaded_file.name.replace(".docx", "").replace(".DOCX", "")
-                    
-                    # Làm sạch tên file
-                    base_name = re.sub(r'[^\w\s-]', '', base_name).strip()
-                    if not base_name:
-                        base_name = "De"
+                    base_name = re.sub(r'[^\w\s-]', '', uploaded_file.name.replace(".docx", "")).strip() or "De"
                     
                     if num_versions == 1:
-                        # Xuất 1 file nhưng vẫn dùng mã đề tùy chọn
                         result = shuffle_docx(file_bytes, shuffle_mode)
                         filename = f"{base_name}_{start_code}.docx"
                         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     else:
-                        # Xuất ZIP với mã đề tùy chọn
                         result = create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start_code)
                         filename = f"{base_name}_From_{start_code}.zip"
                         mime = "application/zip"
                 
-                st.markdown("""
-                <div class="success-box">
-                    <h3>✅ Trộn đề thành công!</h3>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.download_button(
-                    label=f"📥 Tải xuống {filename}",
-                    data=result,
-                    file_name=filename,
-                    mime=mime,
-                    use_container_width=True
-                )
+                st.markdown(f"""<div class="success-box" style="background:#ecfdf5;padding:10px;border-radius:10px;text-align:center;margin-bottom:10px;"><h3>✅ Thành công!</h3></div>""", unsafe_allow_html=True)
+                st.download_button(label=f"📥 Tải xuống {filename}", data=result, file_name=filename, mime=mime, use_container_width=True)
                 
             except Exception as e:
                 st.error(f"❌ Lỗi: {str(e)}")
     
-    # Footer - CẬP NHẬT THEO YÊU CẦU
+    # Footer
     st.markdown("""
     <div class="footer">
-        <p><strong>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</strong></p>
-        <p>Zalo hỗ trợ: <strong>038994070</strong></p>
+        <p><strong>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</strong><br>Zalo hỗ trợ: <strong>038994070</strong></p>
     </div>
     """, unsafe_allow_html=True)
-
 
 if __name__ == "__main__":
     main()
