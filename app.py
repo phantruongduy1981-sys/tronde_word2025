@@ -6,10 +6,10 @@ import io
 import pandas as pd
 from xml.dom import minidom
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.shared import Pt
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
-# ==================== 1. CẤU HÌNH GIAO DIỆN ====================
+# ==================== 1. CẤU HÌNH & GIAO DIỆN ====================
 st.set_page_config(
     page_title="Trộn Đề THPT Minh Đức",
     page_icon="🏫",
@@ -20,8 +20,7 @@ st.set_page_config(
 HEADER_COLOR = "#00695c"
 BUTTON_COLOR = "#d32f2f"
 BG_INFO = "#e8f5e9"
-BG_WARNING = "#fffde7"
-CARD_BG = "#f1f8e9"
+BG_WARNING = "#fffde7" # Màu vàng nhạt cho box lưu ý cũ
 
 st.markdown(f"""
 <style>
@@ -29,23 +28,19 @@ st.markdown(f"""
     .main-header h1 {{ font-size: 22px; font-weight: 800; margin: 0; text-transform: uppercase; letter-spacing: 1px; }}
     .main-header p {{ margin-top: 5px; font-size: 13px; opacity: 0.9; font-weight: 500; }}
     
-    .config-card {{ background-color: {CARD_BG}; border: 1px solid #c5e1a5; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 10px; }}
-    .config-label {{ color: {HEADER_COLOR}; font-weight: bold; font-size: 14px; margin-bottom: 5px; display: block; }}
-    
     .stButton>button {{ background-color: {BUTTON_COLOR}; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; height: 50px; font-size: 16px; transition: 0.3s; }}
-    .stButton>button:hover {{ background-color: #b71c1c; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }}
+    .stButton>button:hover {{ background-color: #b71c1c; }}
     
-    /* Style giống hình ảnh yêu cầu */
-    .guide-title {{ color: #00796b; font-weight: bold; font-size: 16px; margin-bottom: 10px; }}
-    .part-label {{ color: #00695c; font-weight: bold; }}
-    .warning-box {{ background-color: {BG_WARNING}; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 5px; margin-top: 15px; font-size: 14px; }}
-    .warning-header {{ color: #f57f17; font-weight: bold; margin-bottom: 5px; }}
+    /* Style Hướng dẫn cũ */
+    .part-title {{ color: #00796b; font-weight: bold; }}
+    .warning-box {{ background-color: {BG_WARNING}; border-left: 5px solid #fbc02d; padding: 15px; border-radius: 5px; margin-top: 15px; font-size: 14px; color: #333; }}
+    .warning-title {{ color: #f57f17; font-weight: bold; margin-bottom: 5px; font-size: 15px; }}
     
     .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #888; font-size: 13px; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 2. HÀM CỐT LÕI (CORE UTILS) ====================
+# ==================== 2. CÁC HÀM XỬ LÝ (DEFINE TRƯỚC ĐỂ TRÁNH LỖI) ====================
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 M_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 
@@ -56,18 +51,21 @@ def get_text_from_node(node):
     return "".join(texts).strip()
 
 def set_text_to_node(node, new_text):
+    """Thay thế text trong node một cách an toàn"""
     runs = node.getElementsByTagNameNS(W_NS, "r")
     if not runs: return
-    target_run = runs[0]
-    for t in target_run.getElementsByTagNameNS(W_NS, "t"):
-        target_run.removeChild(t)
+    r0 = runs[0]
+    for t in r0.getElementsByTagNameNS(W_NS, "t"): r0.removeChild(t)
     doc = node.ownerDocument
     new_t = doc.createElementNS(W_NS, "w:t")
     new_t.setAttribute("xml:space", "preserve")
     new_t.appendChild(doc.createTextNode(new_text))
-    target_run.appendChild(new_t)
+    r0.appendChild(new_t)
+    # Xóa các run text thừa phía sau để tránh trùng lặp
     for i in range(1, len(runs)):
-        node.removeChild(runs[i])
+        # Chỉ xóa nếu run đó là run text thuần (không chứa ảnh/math)
+        if not runs[i].getElementsByTagNameNS(W_NS, "drawing") and not runs[i].getElementsByTagNameNS(W_NS, "object"):
+             node.removeChild(runs[i])
 
 def has_complex_content(node):
     if node.getElementsByTagNameNS(M_NS, "oMath") or node.getElementsByTagNameNS(M_NS, "oMathPara"): return True
@@ -107,29 +105,39 @@ def clean_formatting(paragraph):
         for u in rPr.getElementsByTagNameNS(W_NS, "u"): rPr.removeChild(u)
 
 def update_label_safely(paragraph, new_label):
+    """
+    Hàm này tìm nhãn cũ (bất kể là gì) và thay thế bằng nhãn mới.
+    Giải quyết triệt để vấn đề 2 dấu chấm.
+    """
     t_nodes = paragraph.getElementsByTagNameNS(W_NS, "t")
     if not t_nodes: return
+    
+    # Chỉ check các node đầu
     for t in t_nodes:
         if not t.firstChild: continue
         txt = t.firstChild.nodeValue
-        # Regex A. B. C. D.
+        
+        # Regex tìm A., B., C., D. (hoặc A, B..)
         if re.match(r'^\s*[A-D][\.:\)]', txt, re.IGNORECASE):
             sub = re.sub(r'^\s*[A-D][\.:\)]', new_label, txt, count=1)
             t.firstChild.nodeValue = sub
             return
-        # Regex a) b) c) d)
+            
+        # Regex tìm a) b) c) d)
         elif re.match(r'^\s*[a-d][\.:\)]', txt, re.IGNORECASE):
             sub = re.sub(r'^\s*[a-d][\.:\)]', new_label, txt, count=1)
             t.firstChild.nodeValue = sub
             return
-        # Regex Câu X (Fix 1 dấu chấm)
+            
+        # Regex tìm Câu X. (Xóa hết các dấu chấm cũ đi)
         elif re.match(r'^\s*Câu\s*\d+', txt, re.IGNORECASE):
+            # [\.:]* ở đây sẽ nuốt hết các dấu chấm thừa (ví dụ ..)
             sub = re.sub(r'^\s*Câu\s*\d+[\.:]*', new_label, txt, count=1, flags=re.IGNORECASE)
             t.firstChild.nodeValue = sub
             return
 
 def create_word_answer_key(excel_data_list):
-    """Hàm tạo file Word đáp án (Đã fix lỗi NameError)"""
+    """Tạo file Word đáp án"""
     doc = Document()
     style = doc.styles['Normal']
     font = style.font
@@ -150,7 +158,6 @@ def create_word_answer_key(excel_data_list):
         table.style = 'Table Grid'
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         
-        # Header
         hdr_cells = table.rows[0].cells
         for i in range(10):
             hdr_cells[i].text = "Câu-ĐA"
@@ -167,10 +174,8 @@ def create_word_answer_key(excel_data_list):
     doc.save(f)
     return f.getvalue()
 
-# ==================== 3. XỬ LÝ NÂNG CAO (FIX LỖI THỪA/THIẾU) ====================
-
 def normalize_part1_options(question_blocks):
-    """Tách dòng và chuẩn hóa cho Phần 1"""
+    """Tách dòng gộp A. ... B. ..."""
     normalized = []
     for block in question_blocks:
         if has_complex_content(block):
@@ -192,8 +197,9 @@ def normalize_part1_options(question_blocks):
             normalized.append(block)
     return normalized
 
+# ==================== 3. XỬ LÝ LOGIC (FIX CỨNG NHÃN) ====================
+
 def process_part1_mcq(question_blocks, q_idx):
-    """Phần 1: Trắc nghiệm (Fix lỗi dư/thiếu)"""
     blocks = normalize_part1_options(question_blocks)
     intro = []
     options = []
@@ -209,38 +215,31 @@ def process_part1_mcq(question_blocks, q_idx):
     labels_mcq = ["A.", "B.", "C.", "D."]
     correct_char = "X"
     
-    # Chỉ xử lý nếu có phương án
-    if options:
-        # Nếu có > 4 phương án (lỗi), chỉ lấy 4 cái đầu
-        if len(options) > 4:
-            options = options[:4]
-            
-        # Trộn
-        random.shuffle(options)
-        
-        # Gán nhãn
-        for i, opt in enumerate(options):
-            # Đảm bảo chỉ gán A, B, C, D
-            if i < 4:
-                lbl = labels_mcq[i]
-                clean_formatting(opt['node'])
-                update_label_safely(opt['node'], lbl)
-                if opt['correct']: correct_char = lbl[0]
-            else:
-                # Trường hợp hiếm hoi vẫn còn dư, xóa format
-                clean_formatting(opt['node'])
-                
-        result_blocks = intro + [o['node'] for o in options]
-    else:
-        result_blocks = intro
+    # Trộn
+    random.shuffle(options)
+    
+    # LOGIC MỚI: Cưỡng chế gán nhãn theo vị trí index
+    # Nếu có 4 dòng, dòng 0 chắc chắn là A, dòng 1 chắc chắn là B...
+    
+    final_options_nodes = []
+    for i, opt in enumerate(options):
+        # Nếu số lượng option > 4, những cái thừa sẽ không được gán nhãn (hoặc gán *)
+        if i < 4:
+            lbl = labels_mcq[i]
+            clean_formatting(opt['node']) # Xóa format cũ
+            update_label_safely(opt['node'], lbl) # Ép nhãn mới (VD: B. -> A.)
+            if opt['correct']: correct_char = lbl[0]
+            final_options_nodes.append(opt['node'])
+        else:
+            # Dư thừa thì bỏ qua hoặc add vào cuối mà ko gán nhãn
+            final_options_nodes.append(opt['node'])
 
     if intro: 
         update_label_safely(intro[0], f"Câu {q_idx}. ")
         
-    return result_blocks, correct_char
+    return intro + final_options_nodes, correct_char
 
 def process_part2_tf(question_blocks, q_idx):
-    """Phần 2: Đúng/Sai (Fix lỗi thứ tự a,b,c,d)"""
     intro = []
     options = []
     
@@ -252,6 +251,7 @@ def process_part2_tf(question_blocks, q_idx):
         else:
             intro.append(b)
             
+    # Tách d)
     d_node = None
     others = []
     for o in options:
@@ -261,18 +261,20 @@ def process_part2_tf(question_blocks, q_idx):
     random.shuffle(others)
     final_opts = others + ([d_node] if d_node else [])
     
-    # ÉP BUỘC GÁN LẠI NHÃN TỪ ĐẦU
+    # Cưỡng chế gán nhãn a, b, c, d
     labels_tf = ["a)", "b)", "c)", "d)"]
+    final_nodes = []
+    
     for k, opt in enumerate(final_opts):
-        # Dù dòng này trước đó là c), giờ nó ở vị trí 0 thì phải thành a)
-        lbl = labels_tf[k] if k < 4 else "*"
-        update_label_safely(opt['node'], lbl)
+        if k < 4:
+            lbl = labels_tf[k]
+            update_label_safely(opt['node'], lbl)
+            final_nodes.append(opt['node'])
     
     if intro:
         update_label_safely(intro[0], f"Câu {q_idx}. ")
         
-    result_blocks = intro + [o['node'] for o in final_opts]
-    return result_blocks, "X"
+    return intro + final_nodes, "X"
 
 def process_part3_fill(question_blocks, q_idx):
     answer_text = "X"
@@ -287,11 +289,13 @@ def process_part3_fill(question_blocks, q_idx):
                 found_ans = True
                 continue 
         blocks_to_keep.insert(0, block)
+    
     if blocks_to_keep:
         update_label_safely(blocks_to_keep[0], f"Câu {q_idx}. ")
+        
     return blocks_to_keep, answer_text
 
-# ==================== 4. PROCESSOR ====================
+# ==================== 4. MAIN PROCESSOR ====================
 
 def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
     input_io = io.BytesIO(file_bytes)
@@ -396,9 +400,12 @@ def process_docx(file_bytes, num_exams, start_id, shuffle_mode):
                 df.to_excel(writer, index=False, sheet_name='DapAn')
             master_zip.writestr("Dap_An_Excel.xlsx", excel_io.getvalue())
             
-            # GỌI HÀM TẠO WORD ĐÃ FIX LỖI NAME ERROR
-            word_bytes = create_word_answer_key(excel_data_list)
-            master_zip.writestr("Dap_An_Word.docx", word_bytes)
+            # GỌI HÀM TẠO WORD ĐÃ ĐỊNH NGHĨA Ở TRÊN
+            try:
+                word_bytes = create_word_answer_key(excel_data_list)
+                master_zip.writestr("Dap_An_Word.docx", word_bytes)
+            except Exception as e:
+                print(f"Lỗi tạo word: {e}")
         
     return final_zip_io.getvalue(), None, None, errors
 
@@ -407,7 +414,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
-        <p>APP TRỘN ĐỀ 2025 - PRO VERSION 7.0</p>
+        <p>APP TRỘN ĐỀ 2025 - PRO VERSION 8.0 (Final Fix)</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -418,21 +425,23 @@ def main():
             sample_url = "https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/export?format=docx"
             st.link_button("📥 Tải File Mẫu", sample_url, use_container_width=True)
             
-            # GIAO DIỆN HƯỚNG DẪN ĐÃ ĐƯỢC KHÔI PHỤC NHƯ YÊU CẦU
+            # GIAO DIỆN HƯỚNG DẪN CŨ NHƯ HÌNH
             st.markdown("""
             <div style="margin-top: 10px;">
-                <div class="guide-title">📌 Cấu trúc file Word chuẩn:</div>
-                <p><span class="part-label">PHẦN 1:</span> Trắc nghiệm nhiều lựa chọn (A. B. C. D.) – Trộn cả câu hỏi + phương án</p>
-                <p><span class="part-label">PHẦN 2:</span> Đúng/Sai (a) b) c) d)) – Trộn câu hỏi + trộn a,b,c (giữ d cố định)</p>
-                <p><span class="part-label">PHẦN 3:</span> Trả lời ngắn – Chỉ trộn thứ tự câu hỏi</p>
+                <p class="part-title">📌 Cấu trúc file Word chuẩn:</p>
+                <ul style="list-style-type: disc; margin-left: 20px;">
+                    <li><b style="color:#00796b">PHẦN 1:</b> Trắc nghiệm (A. B. C. D.)</li>
+                    <li><b style="color:#00796b">PHẦN 2:</b> Đúng/Sai (a) b) c) d))</li>
+                    <li><b style="color:#00796b">PHẦN 3:</b> Trả lời ngắn</li>
+                </ul>
                 
                 <div class="warning-box">
-                    <div class="warning-header">⚠️ Lưu ý quan trọng:</div>
-                    <ul>
-                        <li>Mỗi câu hỏi bắt đầu bằng <code>Câu 1.</code> , <code>Câu 2.</code> ...</li>
-                        <li>Phương án trắc nghiệm: <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code> (viết hoa + dấu chấm)</li>
-                        <li>Phương án đúng/sai: <code>a)</code> <code>b)</code> <code>c)</code> <code>d)</code> (viết thường + dấu ngoặc)</li>
-                        <li>Đáp án đúng có thể <u>gạch chân</u> hoặc <span style="color:red; font-weight:bold">tô màu</span> – sẽ được giữ nguyên sau khi trộn</li>
+                    <div class="warning-title">⚠️ Lưu ý quan trọng:</div>
+                    <ul style="margin-bottom: 0;">
+                        <li>Câu hỏi bắt đầu bằng <code>Câu 1.</code> , <code>Câu 2.</code> ...</li>
+                        <li>Phương án trắc nghiệm: <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code></li>
+                        <li>Phương án đúng/sai: <code>a)</code> <code>b)</code> <code>c)</code> <code>d)</code></li>
+                        <li>Đáp án đúng: <u>gạch chân</u> hoặc <span style="color:red; font-weight:bold">tô màu đỏ</span></li>
                         <li>Phần 3: Ghi <span style="color:red; font-weight:bold">ĐS: Kết quả</span> và tô đỏ.</li>
                     </ul>
                 </div>
@@ -479,7 +488,7 @@ def main():
                             
                     except Exception as e: st.error(f"Lỗi: {str(e)}")
 
-    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 7.0</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="footer">© 2025 Phan Trường Duy - THPT Minh Đức<br>PRO VERSION 8.0</div>""", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
