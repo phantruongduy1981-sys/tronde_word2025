@@ -5,31 +5,31 @@ import zipfile
 import io
 from xml.dom import minidom
 
-# ==================== CẤU HÌNH TRANG (ĐÃ CHỈNH SANG WIDE) ====================
+# ==================== CẤU HÌNH TRANG ====================
 
 st.set_page_config(
     page_title="Trộn Đề Word - THPT Minh Đức",
     page_icon="🏫",
-    layout="wide",  # <--- THAY ĐỔI QUAN TRỌNG: Sử dụng toàn bộ chiều ngang
+    layout="wide",  # Layout toàn màn hình
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS - PHIÊN BẢN BIG SIZE CHO MÀN HÌNH RỘNG
+# Custom CSS - Đã sửa lỗi xuống dòng tiêu đề
 st.markdown("""
 <style>
-    /* 1. Cấu hình chung cho layout Wide */
+    /* 1. Cấu hình chung */
     .block-container {
         padding-top: 2rem !important;
         padding-bottom: 3rem !important;
-        max-width: 95% !important; /* Sử dụng 95% chiều ngang màn hình */
+        max-width: 95% !important;
     }
 
-    /* 2. Header Card - Phóng to cực đại */
+    /* 2. Header Card */
     .header-card {
         background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%);
         border: 2px solid #brent;
         border-radius: 20px;
-        padding: 30px 20px; /* Tăng padding */
+        padding: 30px 10px;
         text-align: center;
         box-shadow: 0 6px 10px rgba(0,0,0,0.1);
         margin-bottom: 25px;
@@ -37,7 +37,9 @@ st.markdown("""
     
     .header-card h1 {
         color: #d93025; 
-        font-size: 4rem !important; /* Tăng size chữ tên trường cực lớn */
+        /* TỰ ĐỘNG ĐIỀU CHỈNH CỠ CHỮ THEO MÀN HÌNH ĐỂ KHÔNG BỊ XUỐNG DÒNG */
+        font-size: clamp(2.5rem, 4vw, 4.5rem) !important; 
+        white-space: nowrap !important; /* BẮT BUỘC KHÔNG XUỐNG DÒNG */
         font-weight: 900;
         text-transform: uppercase;
         margin: 0 !important;
@@ -47,18 +49,18 @@ st.markdown("""
     
     .header-card h2 {
         color: #0d9488;
-        font-size: 2.2rem !important; /* Tăng size tên ứng dụng */
+        font-size: 2.2rem !important;
         font-weight: bold;
         margin: 10px 0 0 0 !important;
     }
 
-    /* 3. Vùng Hướng dẫn - Chữ to dễ đọc */
+    /* 3. Vùng Hướng dẫn */
     .instruction-container {
         background-color: #f8fafc;
         border: 1px solid #cbd5e1;
         border-radius: 15px;
         padding: 25px;
-        font-size: 1.25rem !important; /* Chữ hướng dẫn to hơn (20px) */
+        font-size: 1.25rem !important;
         line-height: 1.6;
     }
     .instruction-container strong {
@@ -69,37 +71,31 @@ st.markdown("""
         margin-bottom: 8px;
     }
 
-    /* 4. Tăng kích thước các thành phần Input (Radio, Number, File Uploader) */
-    
-    /* Chữ nhãn (Label) của các ô nhập liệu */
+    /* 4. Tăng kích thước các thành phần Input */
     .stMarkdown p, .stRadio label, .stNumberInput label, .stFileUploader label {
-        font-size: 1.3rem !important; /* Tăng size nhãn */
+        font-size: 1.3rem !important;
         font-weight: 600;
     }
-    
-    /* Text bên trong Radio button */
     .stRadio div[role="radiogroup"] label p {
         font-size: 1.2rem !important;
     }
-
-    /* Ô nhập số (Number Input) to hơn */
     div[data-baseweb="input"] {
-        height: 3rem; /* Cao hơn */
+        height: 3rem;
         border-radius: 10px;
     }
     div[data-baseweb="input"] input {
-        font-size: 1.2rem !important; /* Số bên trong to hơn */
+        font-size: 1.2rem !important;
         text-align: center;
     }
 
-    /* 5. Nút bấm (Button) - To và nổi bật */
+    /* 5. Nút bấm (Button) */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
         color: white;
         border: none;
-        padding: 1rem 2rem; /* Nút dày hơn */
-        font-size: 1.5rem !important; /* Chữ trong nút to */
+        padding: 1rem 2rem;
+        font-size: 1.5rem !important;
         font-weight: 800;
         border-radius: 12px;
         box-shadow: 0 4px 10px rgba(13, 148, 136, 0.3);
@@ -111,7 +107,6 @@ st.markdown("""
         transform: scale(1.01);
     }
     
-    /* Thông báo lỗi/thành công to hơn */
     .stAlert {
         font-size: 1.1rem !important;
     }
@@ -123,7 +118,7 @@ st.markdown("""
         padding: 2rem 0;
         border-top: 2px dashed #cbd5e1;
         margin-top: 3rem;
-        font-size: 1.1rem; /* Footer to hơn */
+        font-size: 1.1rem;
     }
     .footer strong {
         color: #0d9488;
