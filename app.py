@@ -14,29 +14,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS GIAO DIỆN (GIỮ NGUYÊN) ====================
+# ==================== CSS GIAO DIỆN (ĐÃ CẬP NHẬT: SÁT LẠI & NÚT TO) ====================
 st.markdown("""
 <style>
+    /* 1. Cấu hình chung - Đẩy sát lề trên, giảm khoảng cách phần tử */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important; /* Sát lề trên hơn */
         padding-bottom: 2rem !important;
         max-width: 98% !important;
     }
+    
+    /* QUAN TRỌNG: Giảm khoảng cách giữa các khối (thẻ) xuống mức tối thiểu */
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0.5rem !important;
+        gap: 0.2rem !important; /* Khoảng cách rất nhỏ */
     }
+    
+    /* Ẩn bớt các khoảng trắng mặc định của Streamlit */
+    .stElementContainer {
+        margin-bottom: 0px !important;
+    }
+
+    /* 2. Header Card */
     .header-card {
         background: linear-gradient(180deg, #ffffff 0%, #d1fae5 100%);
         border: 1px solid #a7f3d0;
         border-radius: 15px;
-        padding: 10px 5px;
+        padding: 5px 5px; /* Giảm padding */
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 5px !important; /* Cách phần dưới ít thôi */
     }
     .header-card h1 {
         color: #d93025; 
-        font-size: clamp(2rem, 3.5vw, 3.5rem) !important; 
+        font-size: clamp(1.8rem, 3.5vw, 3.5rem) !important; 
         white-space: nowrap !important;
         font-weight: 900;
         text-transform: uppercase;
@@ -46,69 +56,88 @@ st.markdown("""
     }
     .header-card h2 {
         color: #0d9488;
-        font-size: 1.6rem !important;
+        font-size: 1.5rem !important;
         font-weight: bold;
         margin: 0 !important;
-        padding-top: 2px !important;
+        padding-top: 0px !important;
     }
+
+    /* 3. Step Header - Gọn gàng */
     .step-header {
         color: #0d9488;
-        font-size: 1.4rem;
+        font-size: 1.3rem;
         font-weight: 700;
-        margin-bottom: 5px;
+        margin-top: 5px; 
+        margin-bottom: 2px;
         border-left: 5px solid #0d9488;
         padding-left: 10px;
         background-color: #f0fdfa;
         border-radius: 0 5px 5px 0;
     }
+
+    /* 4. Input - Tinh chỉnh khoảng cách */
     div[data-testid="stNumberInput"] label p {
-        font-size: 1.5rem !important;
+        font-size: 1.4rem !important;
         font-weight: 900 !important;
         color: #0d9488;
+        margin-bottom: 0px;
     }
     div[data-testid="stNumberInput"] input {
-        font-size: 1.5rem !important;
+        font-size: 1.4rem !important;
         font-weight: bold;
         color: #d93025; 
-        height: 3rem;
+        height: 2.8rem;
+        min-height: 2.8rem;
     }
+    /* Radio button gọn lại */
+    div[role="radiogroup"] {
+        gap: 0px !important;
+    }
+
+    /* 5. Vùng Hướng dẫn */
     .instruction-container {
         background-color: #f0fdfa;
         border: 1px solid #99f6e4;
         border-radius: 10px;
-        padding: 15px;
-        font-size: 1.1rem !important;
-        line-height: 1.4;
+        padding: 10px; /* Giảm padding */
+        font-size: 1.05rem !important;
+        line-height: 1.3;
+        margin-bottom: 5px;
     }
+
+    /* 6. NÚT BẤM - TO & ĐẬM */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
         color: white;
         border: none;
-        padding: 0.8rem 1.5rem;
-        font-size: 1.4rem !important;
-        font-weight: 800;
-        border-radius: 10px;
-        box-shadow: 0 4px 10px rgba(13, 148, 136, 0.3);
+        padding: 1rem 1rem !important; /* Tăng padding nút */
+        font-size: 2.0rem !important; /* CHỮ RẤT TO */
+        font-weight: 900 !important; /* RẤT ĐẬM */
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(13, 148, 136, 0.4);
         text-transform: uppercase;
-        margin-top: 15px;
+        margin-top: 10px !important;
+        line-height: 1.2;
     }
     .stButton > button:hover {
         background: linear-gradient(90deg, #0f766e, #0d9488);
-        transform: scale(1.01);
+        transform: scale(1.02);
     }
+
+    /* Footer */
     .footer {
         text-align: center;
         color: #64748b;
-        padding: 1rem 0;
+        padding: 0.5rem 0;
         border-top: 1px dashed #cbd5e1;
         margin-top: 1rem;
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC XỬ LÝ WORD (CORE) ====================
+# ==================== LOGIC XỬ LÝ WORD (GIỮ NGUYÊN 100%) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -128,32 +157,25 @@ def get_text(block):
     return "".join(texts).strip()
 
 def is_marked_correct(node):
-    """Kiểm tra gạch chân, màu đỏ, highlight"""
     u_nodes = node.getElementsByTagNameNS(W_NS, "u")
     for u in u_nodes:
         val = u.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
-    
     color_nodes = node.getElementsByTagNameNS(W_NS, "color")
     for c in color_nodes:
         val = c.getAttributeNS(W_NS, "val")
         if val and val not in ["auto", "000000"]: return True
-            
     highlight_nodes = node.getElementsByTagNameNS(W_NS, "highlight")
     for h in highlight_nodes:
         val = h.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
-    
     shd_nodes = node.getElementsByTagNameNS(W_NS, "shd")
     for s in shd_nodes:
         val = s.getAttributeNS(W_NS, "fill")
         if val and val not in ["auto", "FFFFFF", "000000"]: return True
-
     return False
 
-# --- HÀM LỌC ĐÁP ÁN P3: CẮT BỎ CÁC TỪ THỪA ---
 def extract_highlighted_text(blocks):
-    """Lấy text đáp án và làm sạch"""
     extracted_text = []
     for block in blocks:
         runs = block.getElementsByTagNameNS(W_NS, "r")
@@ -163,13 +185,9 @@ def extract_highlighted_text(blocks):
                 for t in t_nodes:
                     if t.firstChild and t.firstChild.nodeValue:
                         extracted_text.append(t.firstChild.nodeValue)
-    
     full_text = "".join(extracted_text).strip()
-    
-    # Lọc bỏ "Câu 1.", "Câu 1:", "ĐS:", "Đáp số:", "KQ:"...
     full_text = re.sub(r'^(Câu\s*\d+[\.\:]\s*)?', '', full_text, flags=re.IGNORECASE)
     full_text = re.sub(r'^(ĐS|Đáp số|Đáp án|KQ|Kết quả)[\.\:]?\s*', '', full_text, flags=re.IGNORECASE)
-    
     return full_text.strip()
 
 def style_run_blue_bold(run):
@@ -179,14 +197,12 @@ def style_run_blue_bold(run):
     else:
         rPr = doc.createElementNS(W_NS, "w:rPr")
         run.insertBefore(rPr, run.firstChild)
-    
     color_list = rPr.getElementsByTagNameNS(W_NS, "color")
     if color_list: color_el = color_list[0]
     else:
         color_el = doc.createElementNS(W_NS, "w:color")
         rPr.appendChild(color_el)
     color_el.setAttributeNS(W_NS, "w:val", "0000FF")
-    
     b_list = rPr.getElementsByTagNameNS(W_NS, "b")
     if not b_list:
         b_el = doc.createElementNS(W_NS, "w:b")
@@ -287,22 +303,18 @@ def parse_questions_in_range(blocks, start, end):
         else: intro.append(part_blocks[i]); i += 1
     return intro, questions
 
-# --- TRỘN MCQ (P1) ---
 def shuffle_mcq_options(question_blocks):
     indices = []; correct_char = None
     for i, block in enumerate(question_blocks):
         text = get_text(block)
         if re.match(r'^\s*[A-D][\.\)]', text, re.IGNORECASE): indices.append(i)
     if len(indices) < 2: return question_blocks, None
-    
     original_options = [question_blocks[idx] for idx in indices]
     marked_index = -1
     for k, opt_block in enumerate(original_options):
         if is_marked_correct(opt_block):
             marked_index = k; break
-            
     shuffled_options = shuffle_array(original_options)
-    
     if marked_index != -1:
         target_block = original_options[marked_index]
         try:
@@ -310,56 +322,37 @@ def shuffle_mcq_options(question_blocks):
             letters = ["A", "B", "C", "D"]
             if new_pos < len(letters): correct_char = letters[new_pos]
         except: pass
-
     min_idx = min(indices); max_idx = max(indices)
     return question_blocks[:min_idx] + shuffled_options + question_blocks[max_idx + 1:], correct_char
 
-# --- TRỘN TRUE/FALSE (P2) - SỬA LỖI ĐÁP ÁN CHÍNH XÁC ---
 def shuffle_tf_options(question_blocks):
     option_indices = {}
     for i, block in enumerate(question_blocks):
         text = get_text(block)
         m = re.match(r'^\s*([a-d])\)', text, re.IGNORECASE)
         if m: option_indices[m.group(1).lower()] = i
-            
-    # 1. Lấy ra các item cần trộn (a, b, c) và item cố định (d)
     abc_keys = [k for k in ['a', 'b', 'c'] if k in option_indices]
     if len(abc_keys) < 2: return question_blocks, ""
-
-    # 2. Tạo danh sách object kèm trạng thái Đ/S
     items_to_shuffle = []
     for k in abc_keys:
         blk = question_blocks[option_indices[k]]
         stat = 'Đ' if is_marked_correct(blk) else 'S'
         items_to_shuffle.append({'block': blk, 'status': stat})
-
-    # 3. Trộn a, b, c
     shuffled_items = shuffle_array(items_to_shuffle)
-
-    # 4. Xử lý d (cố định vị trí cuối, nhưng vẫn phải lấy trạng thái)
     d_item = None
     if 'd' in option_indices:
         blk = question_blocks[option_indices['d']]
         stat = 'Đ' if is_marked_correct(blk) else 'S'
         d_item = {'block': blk, 'status': stat}
-
-    # 5. Tạo danh sách kết quả cuối cùng (a, b, c đã trộn + d)
     final_ordered_items = shuffled_items.copy()
     if d_item: final_ordered_items.append(d_item)
-
-    # 6. Tạo chuỗi đáp án từ danh sách đã sắp xếp (Ví dụ: Đ-S-S-Đ)
     ans_parts = [item['status'] for item in final_ordered_items]
     ans_str = "-".join(ans_parts)
-
-    # 7. Cập nhật lại blocks trong list gốc
-    # Lấy các index vị trí của a, b, c, d trong văn bản gốc để điền lần lượt
     target_indices = sorted([v for k,v in option_indices.items() if k in ['a','b','c','d']])
-    
     new_blocks = question_blocks.copy()
     for i, target_idx in enumerate(target_indices):
         if i < len(final_ordered_items):
             new_blocks[target_idx] = final_ordered_items[i]['block']
-
     return new_blocks, ans_str
 
 def relabel_mcq_options(question_blocks):
@@ -385,47 +378,34 @@ def relabel_questions(questions, start_index=1):
         if not q_blocks: continue
         update_question_label(q_blocks[0], f"Câu {start_index + i}.")
 
-# --- PROCESS PART ---
 def process_part(blocks, start, end, part_type, start_number=1):
     intro, questions = parse_questions_in_range(blocks, start, end)
     questions_data = [] 
-    
     for q in questions:
         if part_type == "PHAN1":
             new_q_blocks, ans = shuffle_mcq_options(q)
             questions_data.append((new_q_blocks, ans))
-            
         elif part_type == "PHAN2":
             new_q_blocks, ans = shuffle_tf_options(q)
             questions_data.append((new_q_blocks, ans))
-            
         elif part_type == "PHAN3":
             ans = extract_highlighted_text(q) 
             questions_data.append((q, ans))
-            
         else:
             questions_data.append((q, None))
-            
     shuffled_data = shuffle_array(questions_data)
-    
     final_questions_blocks = [x[0] for x in shuffled_data]
     final_answers_list = [x[1] for x in shuffled_data]
-    
     relabel_questions(final_questions_blocks, start_number)
-    
     if part_type == "PHAN1":
         for q in final_questions_blocks: relabel_mcq_options(q)
     elif part_type == "PHAN2":
         for q in final_questions_blocks: relabel_tf_options(q)
-        
     result = intro.copy()
-    for q in final_questions_blocks:
-        result.extend(q)
-        
+    for q in final_questions_blocks: result.extend(q)
     part_answers = {}
     for i, ans in enumerate(final_answers_list):
         if ans: part_answers[start_number + i] = ans
-            
     next_number = start_number + len(final_questions_blocks)
     return result, next_number, part_answers
 
@@ -465,8 +445,6 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
             p1_idx = find_part_index(blocks, 1); p2_idx = find_part_index(blocks, 2)
             p3_idx = find_part_index(blocks, 3); p4_idx = find_part_index(blocks, 4)
             new_blocks = []; cursor = 0; curr_num = 1
-            
-            # P1
             if p1_idx >= 0:
                 new_blocks.extend(blocks[cursor:p1_idx + 1]); cursor = p1_idx + 1
                 end1 = len(blocks)
@@ -477,8 +455,6 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 new_blocks.extend(p1_blocks)
                 all_answers["P1"] = p1_ans
                 curr_num = next_num; cursor = end1
-            
-            # P2
             if p2_idx >= 0:
                 new_blocks.append(blocks[p2_idx]); start2 = p2_idx + 1
                 end2 = len(blocks)
@@ -490,8 +466,6 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 all_answers["P2_Start"] = (curr_num - len(p2_ans)) if p2_ans else curr_num
                 all_answers["P2_Count"] = len(p2_ans) if p2_ans else 0
                 curr_num = next_num; cursor = end2
-            
-            # P3
             if p3_idx >= 0:
                 new_blocks.append(blocks[p3_idx]); start3 = p3_idx + 1
                 end3 = len(blocks)
@@ -502,10 +476,7 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 all_answers["P3_Start"] = (curr_num - len(p3_ans)) if p3_ans else curr_num
                 all_answers["P3_Count"] = len(p3_ans) if p3_ans else 0
                 curr_num = next_num; cursor = end3
-
-            # P4
             if p4_idx >= 0: new_blocks.extend(blocks[p4_idx:])
-            
             if p1_idx == -1 and p2_idx == -1 and p3_idx == -1 and p4_idx == -1:
                 new_blocks, ans = process_all_as_mcq(blocks)
                 all_answers["P1"] = ans
@@ -546,8 +517,6 @@ def generate_answer_key_html(all_exam_data):
     if not all_exam_data: return html + "</body></html>"
     exam_codes = sorted(all_exam_data.keys())
     sample_data = all_exam_data[exam_codes[0]]
-    
-    # P1
     if "P1" in sample_data and sample_data["P1"]:
         html += "<h3>PHẦN I: Trắc nghiệm nhiều lựa chọn</h3>"
         html += "<div class='note'>- Mỗi câu đúng được 0,25 điểm.</div>"
@@ -561,8 +530,6 @@ def generate_answer_key_html(all_exam_data):
             for q in q_nums: html += f"<td><b>{ans_map.get(q, '')}</b></td>"
             html += "</tr>"
         html += "</table>"
-    
-    # P2
     if "P2" in sample_data and sample_data["P2"]:
         count = sample_data.get("P2_Count", 0)
         q_nums_p2 = sorted(sample_data["P2"].keys())
@@ -578,8 +545,6 @@ def generate_answer_key_html(all_exam_data):
             for q in q_nums_p2: html += f"<td><b>{ans_map.get(q, '')}</b></td>"
             html += "</tr>"
         html += "</table>"
-
-    # P3
     if "P3" in sample_data and sample_data["P3"]:
         q_nums_p3 = sorted(sample_data["P3"].keys())
         html += "<h3>PHẦN III: Trắc nghiệm trả lời ngắn</h3>"
@@ -593,7 +558,6 @@ def generate_answer_key_html(all_exam_data):
             for q in q_nums_p3: html += f"<td><b>{ans_map.get(q, '')}</b></td>"
             html += "</tr>"
         html += "</table>"
-
     html += "</body></html>"
     return html
 
@@ -635,24 +599,22 @@ def main():
             <strong>HƯỚNG DẪN TẠO ĐÁP ÁN TỰ ĐỘNG:</strong>
             <ul>
                 <li><strong>Phần 1 & 2:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> ý đúng.</li>
-                <li><strong>Phần 3:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> nội dung đáp án (chỉ tô phần đáp số, không tô chữ 'Câu...').</li>
+                <li><strong>Phần 3:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> nội dung đáp án.</li>
             </ul>
             <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
         </div>
         """, unsafe_allow_html=True)
     
-    st.write("") 
-
+    # Không dùng st.write("") để giảm khoảng cách
+    
     col_left, col_right = st.columns([1, 1], gap="large")
 
     with col_left:
         st.markdown('<div class="step-header">1️⃣ CHỌN FILE ĐỀ & KIỂU TRỘN</div>', unsafe_allow_html=True)
         uploaded_file = st.file_uploader("", type=["docx"], label_visibility="collapsed")
-        
         if uploaded_file:
             st.success(f"✅ Đã tải lên: **{uploaded_file.name}**")
         
-        st.write("")
         shuffle_mode = st.radio(
             "Chọn chế độ:",
             options=["auto", "mcq", "tf"],
@@ -677,8 +639,6 @@ def main():
         else:
             st.info(f"📄 Tạo 1 đề: {start_code}")
 
-    st.write("") 
-
     st.markdown('<div class="step-header">3️⃣ THỰC HIỆN</div>', unsafe_allow_html=True)
     if st.button("🎲 BẮT ĐẦU TRỘN ĐỀ & TẢI VỀ", type="primary", use_container_width=True):
         if not uploaded_file:
@@ -701,7 +661,6 @@ def main():
                 st.balloons()
                 st.success("✅ THÀNH CÔNG! File tải về đã bao gồm Đề thi và Bảng đáp án.")
                 st.download_button(label=f"📥 TẢI XUỐNG {filename}", data=result, file_name=filename, mime=mime, use_container_width=True)
-                
             except Exception as e:
                 st.error(f"❌ Lỗi: {str(e)}")
     
