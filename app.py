@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS GIAO DIỆN (ĐÃ CẬP NHẬT THEO YÊU CẦU) ====================
+# ==================== CSS GIAO DIỆN ====================
 st.markdown("""
 <style>
     /* 1. Cấu hình chung */
@@ -63,18 +63,21 @@ st.markdown("""
         margin-bottom: 5px;
         border-left: 5px solid #0d9488;
         padding-left: 10px;
+        background-color: #f0fdfa; /* Nền nhẹ cho header bước */
+        border-radius: 0 5px 5px 0;
     }
 
     /* 4. Style ĐẶC BIỆT cho Số lượng đề & Mã đề (Bold + Big Size 50%) */
     div[data-testid="stNumberInput"] label p {
-        font-size: 1.5rem !important; /* Tăng 50% so với bình thường (~1rem) */
+        font-size: 1.5rem !important; /* Tăng 50% */
         font-weight: 900 !important;
-        color: #1f2937;
+        color: #0d9488;
     }
     div[data-testid="stNumberInput"] input {
-        font-size: 1.3rem !important;
+        font-size: 1.5rem !important; /* Số to hơn */
         font-weight: bold;
-        color: #d93025; /* Số màu đỏ cho nổi */
+        color: #d93025; 
+        height: 3rem;
     }
 
     /* 5. Vùng Hướng dẫn */
@@ -137,30 +140,42 @@ def get_text(block):
             texts.append(t.firstChild.nodeValue)
     return "".join(texts).strip()
 
-# --- Hàm kiểm tra đáp án đúng (Gạch chân hoặc Màu đỏ) ---
-def is_correct_answer(block):
-    """Kiểm tra xem block có chứa định dạng gạch chân hoặc màu đỏ/màu khác đen không"""
+# --- HÀM CHECK ĐÁP ÁN (Dùng chung cho cả 3 phần) ---
+def is_marked_correct(node):
+    """Kiểm tra xem node (run/paragraph) có được đánh dấu (đỏ/gạch chân) không"""
     # Check underline
-    u_nodes = block.getElementsByTagNameNS(W_NS, "u")
+    u_nodes = node.getElementsByTagNameNS(W_NS, "u")
     for u in u_nodes:
         val = u.getAttributeNS(W_NS, "val")
-        if val and val != "none":
-            return True
+        if val and val != "none": return True
     
     # Check color
-    color_nodes = block.getElementsByTagNameNS(W_NS, "color")
+    color_nodes = node.getElementsByTagNameNS(W_NS, "color")
     for c in color_nodes:
         val = c.getAttributeNS(W_NS, "val")
-        # FF0000 là đỏ, hoặc bất kỳ màu nào khác auto/000000
-        if val and val not in ["auto", "000000"]:
-            return True
+        if val and val not in ["auto", "000000"]: return True
             
     # Check highlight
-    highlight_nodes = block.getElementsByTagNameNS(W_NS, "highlight")
-    if highlight_nodes:
-        return True
+    highlight_nodes = node.getElementsByTagNameNS(W_NS, "highlight")
+    if highlight_nodes: return True
 
     return False
+
+# --- HÀM TRÍCH XUẤT TEXT ĐÁP ÁN (CHO PHẦN 3) ---
+def extract_highlighted_text(blocks):
+    """Quét tất cả các run trong blocks, nếu run đó được tô màu/gạch chân thì lấy text"""
+    extracted_text = []
+    for block in blocks:
+        runs = block.getElementsByTagNameNS(W_NS, "r")
+        for run in runs:
+            if is_marked_correct(run): # Kiểm tra properties của run
+                # Lấy text trong run này
+                t_nodes = run.getElementsByTagNameNS(W_NS, "t")
+                for t in t_nodes:
+                    if t.firstChild and t.firstChild.nodeValue:
+                        extracted_text.append(t.firstChild.nodeValue)
+    
+    return "".join(extracted_text).strip()
 
 def style_run_blue_bold(run):
     doc = run.ownerDocument
@@ -170,7 +185,6 @@ def style_run_blue_bold(run):
         rPr = doc.createElementNS(W_NS, "w:rPr")
         run.insertBefore(rPr, run.firstChild)
     
-    # Màu xanh
     color_list = rPr.getElementsByTagNameNS(W_NS, "color")
     if color_list: color_el = color_list[0]
     else:
@@ -178,7 +192,6 @@ def style_run_blue_bold(run):
         rPr.appendChild(color_el)
     color_el.setAttributeNS(W_NS, "w:val", "0000FF")
     
-    # In đậm
     b_list = rPr.getElementsByTagNameNS(W_NS, "b")
     if not b_list:
         b_el = doc.createElementNS(W_NS, "w:b")
@@ -281,71 +294,97 @@ def parse_questions_in_range(blocks, start, end):
         else: intro.append(part_blocks[i]); i += 1
     return intro, questions
 
-# --- LOGIC TRỘN & THEO DÕI ĐÁP ÁN MCQ ---
+# --- TRỘN MCQ (P1) VÀ LẤY ĐÁP ÁN ---
 def shuffle_mcq_options(question_blocks):
-    """Trộn và trả về: (blocks_đã_trộn, đáp_án_đúng_nếu_có)"""
-    indices = []
-    correct_char = None # A, B, C, D
-    
-    # Tìm các phương án A, B, C, D
+    indices = []; correct_char = None
     for i, block in enumerate(question_blocks):
         text = get_text(block)
-        if re.match(r'^\s*[A-D][\.\)]', text, re.IGNORECASE):
-            indices.append(i)
+        if re.match(r'^\s*[A-D][\.\)]', text, re.IGNORECASE): indices.append(i)
+    if len(indices) < 2: return question_blocks, None
     
-    if len(indices) < 2:
-        return question_blocks, None
-    
-    # Xác định đáp án đúng dựa trên gạch chân/màu sắc TRƯỚC khi trộn
+    # Check đáp án
     original_options = [question_blocks[idx] for idx in indices]
     marked_index = -1
-    
     for k, opt_block in enumerate(original_options):
-        if is_correct_answer(opt_block):
-            marked_index = k
-            break
+        if is_marked_correct(opt_block): # Dùng hàm check chung
+            marked_index = k; break
             
-    # Thực hiện trộn
     shuffled_options = shuffle_array(original_options)
     
-    # Tìm xem đáp án đúng đã chạy đi đâu
     if marked_index != -1:
-        # marked_index là index trong danh sách original_options (0=A cũ, 1=B cũ...)
-        # Tìm block đó trong shuffled_options
         target_block = original_options[marked_index]
         try:
             new_pos = shuffled_options.index(target_block)
-            # new_pos: 0->A, 1->B, 2->C, 3->D
             letters = ["A", "B", "C", "D"]
-            if new_pos < len(letters):
-                correct_char = letters[new_pos]
-        except:
-            pass
+            if new_pos < len(letters): correct_char = letters[new_pos]
+        except: pass
 
-    # Tái tạo danh sách blocks
     min_idx = min(indices); max_idx = max(indices)
-    before = question_blocks[:min_idx]
-    after = question_blocks[max_idx + 1:]
-    
-    return before + shuffled_options + after, correct_char
+    return question_blocks[:min_idx] + shuffled_options + question_blocks[max_idx + 1:], correct_char
 
+# --- TRỘN TRUE/FALSE (P2) VÀ LẤY ĐÁP ÁN (D-S-D-S) ---
 def shuffle_tf_options(question_blocks):
-    """Trộn T/F (không theo dõi đáp án chi tiết vì phức tạp)"""
-    option_indices = {}
+    """
+    Logic: Nếu ý nào được gạch chân/tô đỏ -> Đ (Đúng). Không thì -> S (Sai).
+    Sau đó trộn và trả về chuỗi đáp án (ví dụ: 'D-S-S-D')
+    """
+    option_indices = {} # {'a': index, 'b': index...}
+    
+    # 1. Tìm các ý a,b,c,d
     for i, block in enumerate(question_blocks):
         text = get_text(block)
         m = re.match(r'^\s*([a-d])\)', text, re.IGNORECASE)
         if m: option_indices[m.group(1).lower()] = i
+            
     abc_idx = [option_indices.get(k) for k in ["a", "b", "c"] if option_indices.get(k) is not None]
-    if len(abc_idx) < 2: return question_blocks, None
+    if len(abc_idx) < 2: return question_blocks, ""
+    
+    # 2. Xác định trạng thái Đúng/Sai (D/S) cho từng block TRƯỚC khi trộn
+    # block_status_map = { block_object: 'D' or 'S' }
+    block_status_map = {}
+    
+    all_opt_indices = [v for v in option_indices.values() if v is not None]
+    for idx in all_opt_indices:
+        block = question_blocks[idx]
+        if is_marked_correct(block): # Nếu gạch chân/đỏ là Đúng
+            block_status_map[idx] = 'D'
+        else:
+            block_status_map[idx] = 'S'
+
+    # 3. Trộn (giữ d cố định nếu có logic đó, hoặc trộn a,b,c)
+    # Theo code cũ: trộn a,b,c. d giữ nguyên vị trí cuối cùng trong nhóm a,b,c
+    # Nhưng logic cũ: d_node được append vào cuối.
+    
     abc_nodes = [question_blocks[idx] for idx in abc_idx]
     shuffled_abc = shuffle_array(abc_nodes)
-    all_idx = [v for v in option_indices.values() if v is not None]
-    min_idx = min(all_idx); max_idx = max(all_idx)
-    d_node = question_blocks[option_indices["d"]] if "d" in option_indices else None
-    middle = shuffled_abc.copy()
-    if d_node: middle.append(d_node)
-    return question_blocks[:min_idx] + middle + question_blocks[max_idx + 1:], None
+    
+    d_idx = option_indices.get("d")
+    d_node = question_blocks[d_idx] if d_idx is not None else None
+    
+    final_ordered_nodes = shuffled_abc.copy()
+    if d_node: final_ordered_nodes.append(d_node)
+    
+    # 4. Tạo chuỗi đáp án từ thứ tự mới
+    # Tìm lại status dựa vào block object (hoặc so sánh nội dung, nhưng object là safe nhất nếu chưa clone)
+    # Vì list `final_ordered_nodes` chứa các block object
+    # Ta cần map ngược lại xem block đó ban đầu ở index nào để lấy status
+    
+    # Cách đơn giản: Duyệt final_ordered_nodes, check lại is_marked_correct(block)
+    answer_parts = []
+    for block in final_ordered_nodes:
+        if is_marked_correct(block): answer_parts.append("D")
+        else: answer_parts.append("S")
+        
+    answer_string = "-".join(answer_parts) # Ví dụ: "D-S-D-S"
+
+    # 5. Tái tạo danh sách blocks
+    all_values = [v for v in option_indices.values() if v is not None]
+    min_idx = min(all_values); max_idx = max(all_values)
+    
+    middle = final_ordered_nodes
+    new_blocks = question_blocks[:min_idx] + middle + question_blocks[max_idx + 1:]
+    
+    return new_blocks, answer_string
 
 def relabel_mcq_options(question_blocks):
     letters = ["A", "B", "C", "D"]; option_blocks = []
@@ -370,63 +409,57 @@ def relabel_questions(questions, start_index=1):
         if not q_blocks: continue
         update_question_label(q_blocks[0], f"Câu {start_index + i}.")
 
-# --- PROCESS PART (CÓ THU THẬP ĐÁP ÁN) ---
+# --- PROCESS PART (CẬP NHẬT LẤY ĐÁP ÁN P2, P3) ---
 def process_part(blocks, start, end, part_type, start_number=1):
     intro, questions = parse_questions_in_range(blocks, start, end)
-    shuffled_questions_with_blocks = []
     
-    # Dictionary lưu đáp án của phần này: { "Câu 1": "A", "Câu 2": "C"... }
-    part_answers = {} 
+    # Lưu cặp (blocks, answer) trước khi trộn câu hỏi
+    # P1 ans: "A", P2 ans: "D-S-D-D", P3 ans: "-5"
+    questions_data = [] 
     
-    # 1. Trộn từng câu và lấy đáp án
-    temp_processed = []
-    for q_idx, q in enumerate(questions):
+    for q in questions:
         if part_type == "PHAN1":
-            new_blocks, ans = shuffle_mcq_options(q)
+            new_q_blocks, ans = shuffle_mcq_options(q)
+            questions_data.append((new_q_blocks, ans))
+            
         elif part_type == "PHAN2":
-            new_blocks, ans = shuffle_tf_options(q) # ans sẽ là None
+            new_q_blocks, ans = shuffle_tf_options(q)
+            questions_data.append((new_q_blocks, ans))
+            
+        elif part_type == "PHAN3":
+            # Phần 3: Không trộn nội dung bên trong, chỉ lấy đáp án text
+            # Trích xuất text từ các run có màu đỏ/gạch chân
+            ans = extract_highlighted_text(q) 
+            questions_data.append((q, ans))
+            
         else:
-            new_blocks, ans = q.copy(), None
-        temp_processed.append(new_blocks)
-        
-        # Lưu đáp án tạm (chưa đánh số câu chính thức)
-        # Sẽ map lại sau khi trộn thứ tự câu hỏi
-        # Cấu trúc temp: (blocks, original_answer_char)
-        
-    # 2. Trộn thứ tự câu hỏi
-    # Cần giữ liên kết giữa câu hỏi và đáp án của nó
-    combined = list(zip(temp_processed, [None]*len(questions))) # Placeholder
-    if part_type == "PHAN1":
-        # Với Phần 1, ta cần list (blocks, answer)
-        combined = []
-        for q in questions:
-            b, a = shuffle_mcq_options(q)
-            combined.append((b, a))
+            questions_data.append((q, None))
+            
+    # Trộn thứ tự câu hỏi
+    shuffled_data = shuffle_array(questions_data)
     
-    shuffled_combined = shuffle_array(combined)
+    # Tách ra
+    final_questions_blocks = [x[0] for x in shuffled_data]
+    final_answers_list = [x[1] for x in shuffled_data]
     
-    # Tách ra lại
-    final_questions_blocks = [x[0] for x in shuffled_combined]
-    final_answers_list = [x[1] for x in shuffled_combined]
-    
-    # 3. Đánh số câu hỏi
+    # Đánh số câu
     relabel_questions(final_questions_blocks, start_number)
     
-    # 4. Đánh lại nhãn ABCD/abcd
+    # Đánh nhãn ABCD
     if part_type == "PHAN1":
         for q in final_questions_blocks: relabel_mcq_options(q)
     elif part_type == "PHAN2":
         for q in final_questions_blocks: relabel_tf_options(q)
         
-    # 5. Tổng hợp blocks kết quả
+    # Ghép lại
     result = intro.copy()
     for q in final_questions_blocks:
         result.extend(q)
         
-    # 6. Tổng hợp Map Đáp án {1: 'A', 2: 'B'}
-    # start_number là số câu bắt đầu (vd: 1, 13, 25...)
+    # Tạo map đáp án {Số_câu: Đáp_án}
+    part_answers = {}
     for i, ans in enumerate(final_answers_list):
-        if ans:
+        if ans: # Chỉ lưu nếu có đáp án
             part_answers[start_number + i] = ans
             
     next_number = start_number + len(final_questions_blocks)
@@ -434,12 +467,12 @@ def process_part(blocks, start, end, part_type, start_number=1):
 
 def process_all_as_mcq(blocks):
     intro, questions = parse_questions_in_range(blocks, 0, len(blocks))
-    combined = []
+    questions_data = []
     for q in questions:
         b, a = shuffle_mcq_options(q)
-        combined.append((b, a))
+        questions_data.append((b, a))
         
-    shuffled = shuffle_array(combined)
+    shuffled = shuffle_array(questions_data)
     final_blocks = [x[0] for x in shuffled]
     final_ans = [x[1] for x in shuffled]
     
@@ -452,13 +485,11 @@ def process_all_as_mcq(blocks):
     answers = {}
     for i, a in enumerate(final_ans):
         if a: answers[i+1] = a
-        
     return result, answers
 
-# --- LOGIC CHÍNH: CÓ TRẢ VỀ ĐÁP ÁN ---
 def shuffle_docx(file_bytes, shuffle_mode="auto"):
     input_buffer = io.BytesIO(file_bytes)
-    all_answers = {} # { "P1": {1:'A', 2:'B'}, "P2": {}, ... }
+    all_answers = {} 
     
     with zipfile.ZipFile(input_buffer, 'r') as zin:
         doc_xml = zin.read("word/document.xml").decode('utf-8')
@@ -471,15 +502,14 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
             new_blocks, ans = process_all_as_mcq(blocks)
             all_answers["P1"] = ans
         elif shuffle_mode == "tf":
-            # TF mode fallback
-            new_blocks = process_all_as_tf(blocks) # Hàm cũ chưa sửa để trả về ans, nhưng ít dùng mode này
+            new_blocks, _ = process_all_as_mcq(blocks) # Fallback đơn giản
         else:
             p1_idx = find_part_index(blocks, 1); p2_idx = find_part_index(blocks, 2)
             p3_idx = find_part_index(blocks, 3); p4_idx = find_part_index(blocks, 4)
             
             new_blocks = []; cursor = 0; curr_num = 1
             
-            # PHẦN 1
+            # P1
             if p1_idx >= 0:
                 new_blocks.extend(blocks[cursor:p1_idx + 1]); cursor = p1_idx + 1
                 end1 = len(blocks)
@@ -492,7 +522,7 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 all_answers["P1"] = p1_ans
                 curr_num = next_num; cursor = end1
             
-            # PHẦN 2
+            # P2
             if p2_idx >= 0:
                 new_blocks.append(blocks[p2_idx]); start2 = p2_idx + 1
                 end2 = len(blocks)
@@ -501,11 +531,15 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 
                 p2_blocks, next_num, p2_ans = process_part(blocks, start2, end2, "PHAN2", curr_num)
                 new_blocks.extend(p2_blocks)
-                all_answers["P2_Count"] = len(p2_ans) if p2_ans else (next_num - curr_num) # Lưu số lượng câu
-                all_answers["P2_Start"] = curr_num
+                
+                # Lưu thông tin P2 để tạo bảng
+                all_answers["P2"] = p2_ans 
+                all_answers["P2_Start"] = (curr_num - len(p2_ans)) if p2_ans else curr_num # Start num của P2
+                all_answers["P2_Count"] = len(p2_ans) if p2_ans else 0
+                
                 curr_num = next_num; cursor = end2
             
-            # PHẦN 3
+            # P3
             if p3_idx >= 0:
                 new_blocks.append(blocks[p3_idx]); start3 = p3_idx + 1
                 end3 = len(blocks)
@@ -513,18 +547,20 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
                 
                 p3_blocks, next_num, p3_ans = process_part(blocks, start3, end3, "PHAN3", curr_num)
                 new_blocks.extend(p3_blocks)
-                all_answers["P3_Count"] = (next_num - curr_num)
-                all_answers["P3_Start"] = curr_num
+                
+                all_answers["P3"] = p3_ans
+                all_answers["P3_Start"] = (curr_num - len(p3_ans)) if p3_ans else curr_num
+                all_answers["P3_Count"] = len(p3_ans) if p3_ans else 0
+                
                 curr_num = next_num; cursor = end3
 
-            # PHẦN 4
+            # P4
             if p4_idx >= 0: new_blocks.extend(blocks[p4_idx:])
             
             if p1_idx == -1 and p2_idx == -1 and p3_idx == -1 and p4_idx == -1:
                 new_blocks, ans = process_all_as_mcq(blocks)
                 all_answers["P1"] = ans
         
-        # Reconstruct XML
         other_nodes = [c for c in list(body.childNodes) if c.nodeType == c.ELEMENT_NODE and c.localName not in ["p", "tbl"]]
         while body.firstChild: body.removeChild(body.firstChild)
         for block in new_blocks: body.appendChild(block)
@@ -538,11 +574,7 @@ def shuffle_docx(file_bytes, shuffle_mode="auto"):
         
         return output_buffer.getvalue(), all_answers
 
-# --- TẠO FILE BẢNG ĐÁP ÁN (HTML -> WORD) ---
 def generate_answer_key_html(all_exam_data):
-    """Tạo nội dung HTML cho file Word đáp án"""
-    # all_exam_data: { "101": { "P1": {1:'A'...}, "P2_Count": 4... }, "102": ... }
-    
     html = """
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'><title>Đáp án</title>
@@ -557,7 +589,6 @@ def generate_answer_key_html(all_exam_data):
     </style>
     </head><body>
     """
-    
     html += """
     <h1>TRƯỜNG THPT MINH ĐỨC</h1>
     <h2>BẢNG ĐÁP ÁN</h2>
@@ -565,15 +596,17 @@ def generate_answer_key_html(all_exam_data):
     <br>
     """
     
+    if not all_exam_data: return html + "</body></html>"
+    
     exam_codes = sorted(all_exam_data.keys())
     sample_data = all_exam_data[exam_codes[0]]
     
-    # --- PHẦN 1: TRẮC NGHIỆM ---
+    # --- P1: TRẮC NGHIỆM ---
     if "P1" in sample_data and sample_data["P1"]:
         html += "<h3>PHẦN I: Trắc nghiệm nhiều lựa chọn</h3>"
         html += "<div class='note'>- Mỗi câu đúng được 0,25 điểm.</div>"
         
-        # Lấy danh sách câu hỏi P1
+        # Lấy tất cả số câu hỏi của P1
         q_nums = sorted(sample_data["P1"].keys())
         
         html += "<table><tr><th>Mã đề</th>"
@@ -588,40 +621,45 @@ def generate_answer_key_html(all_exam_data):
             html += "</tr>"
         html += "</table>"
     
-    # --- PHẦN 2: ĐÚNG SAI (TEMPLATE) ---
-    if "P2_Count" in sample_data:
-        count = sample_data["P2_Count"]
-        start = sample_data.get("P2_Start", 1)
+    # --- P2: ĐÚNG SAI (ĐIỀN ĐÁP ÁN TỰ ĐỘNG) ---
+    if "P2" in sample_data and sample_data["P2"]:
+        count = sample_data.get("P2_Count", 0)
+        # Lấy danh sách câu hỏi P2 từ sample
+        q_nums_p2 = sorted(sample_data["P2"].keys())
         
         html += "<h3>PHẦN II: Trắc nghiệm đúng sai</h3>"
         html += "<div class='note'>- Điểm tối đa mỗi câu là 1 điểm.</div>"
         html += "<div class='note'>- Đúng 1 ý được 0,1 điểm; đúng 2 ý được 0,25 điểm; đúng 3 ý được 0,5 điểm; đúng 4 ý được 1 điểm.</div>"
         
         html += "<table><tr><th>Mã đề</th>"
-        for i in range(count): html += f"<th>Câu {start + i}</th>"
+        for q in q_nums_p2: html += f"<th>Câu {q}</th>"
         html += "</tr>"
         
         for code in exam_codes:
             html += f"<tr><td><b>{code}</b></td>"
-            for i in range(count): html += "<td></td>" # Để trống cho giáo viên điền
+            ans_map = all_exam_data[code].get("P2", {})
+            for q in q_nums_p2:
+                # ans_map[q] là chuỗi "D-S-D-S"
+                html += f"<td><b>{ans_map.get(q, '')}</b></td>"
             html += "</tr>"
         html += "</table>"
 
-    # --- PHẦN 3: TRẢ LỜI NGẮN (TEMPLATE) ---
-    if "P3_Count" in sample_data:
-        count = sample_data["P3_Count"]
-        start = sample_data.get("P3_Start", 1)
+    # --- P3: TRẢ LỜI NGẮN (ĐIỀN ĐÁP ÁN TỰ ĐỘNG) ---
+    if "P3" in sample_data and sample_data["P3"]:
+        q_nums_p3 = sorted(sample_data["P3"].keys())
         
         html += "<h3>PHẦN III: Trắc nghiệm trả lời ngắn</h3>"
         html += "<div class='note'>- Điểm tối đa mỗi câu là 0,5 điểm.</div>"
         
         html += "<table><tr><th>Mã đề</th>"
-        for i in range(count): html += f"<th>Câu {start + i}</th>"
+        for q in q_nums_p3: html += f"<th>Câu {q}</th>"
         html += "</tr>"
         
         for code in exam_codes:
             html += f"<tr><td><b>{code}</b></td>"
-            for i in range(count): html += "<td></td>" # Để trống
+            ans_map = all_exam_data[code].get("P3", {})
+            for q in q_nums_p3:
+                html += f"<td><b>{ans_map.get(q, '')}</b></td>"
             html += "</tr>"
         html += "</table>"
 
@@ -633,18 +671,14 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
     all_exam_data = {}
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
-        # 1. Tạo các file đề
         for i in range(num_versions):
             current_code = start_code + i
             shuffled_bytes, exam_answers = shuffle_docx(file_bytes, shuffle_mode)
-            
-            # Lưu đáp án của mã đề này
             all_exam_data[current_code] = exam_answers
             
             filename = f"{base_name}_{current_code}.docx"
             zout.writestr(filename, shuffled_bytes)
         
-        # 2. Tạo file Bảng Đáp Án (Word via HTML)
         try:
             answer_key_html = generate_answer_key_html(all_exam_data)
             zout.writestr("Bang_Dap_An.doc", answer_key_html.encode('utf-8'))
@@ -656,7 +690,6 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
 # ==================== GIAO DIỆN STREAMLIT ====================
 
 def main():
-    # Header
     st.markdown("""
     <div class="header-card">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
@@ -664,7 +697,6 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Hướng dẫn
     with st.expander("📋 Hướng dẫn & Cấu trúc file", expanded=False):
         st.markdown("""
         <div class="instruction-container">
@@ -675,9 +707,10 @@ def main():
                 <li><strong>PHẦN 3:</strong> Trả lời ngắn</li>
                 <li><strong>PHẦN 4:</strong> Tự luận (Giữ nguyên)</li>
             </ul>
-            <strong>Lưu ý về Đáp Án:</strong>
+            <strong>HƯỚNG DẪN TẠO ĐÁP ÁN TỰ ĐỘNG:</strong>
             <ul>
-                <li>Để phần mềm tự tạo <b>Bảng Đáp Án</b> cho Phần 1, vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> đáp án đúng trong file gốc.</li>
+                <li><strong>Phần 1 & 2:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> ý đúng (hoặc chữ cái A,B,C,D / a,b,c,d).</li>
+                <li><strong>Phần 3:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> nội dung đáp án nằm trong câu hỏi.</li>
             </ul>
             <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
         </div>
@@ -685,20 +718,16 @@ def main():
     
     st.write("") 
 
-    # 1. Upload
-    st.markdown('<div class="step-header">1️⃣ CHỌN FILE ĐỀ WORD (.docx)</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("", type=["docx"], label_visibility="collapsed")
-    
-    if uploaded_file:
-        st.success(f"✅ Đã tải lên: **{uploaded_file.name}**")
-    
-    st.write("") 
-    
     col_left, col_right = st.columns([1, 1], gap="large")
-    
+
     with col_left:
-        # 2. Kiểu trộn
-        st.markdown('<div class="step-header">2️⃣ KIỂU TRỘN</div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header">1️⃣ CHỌN FILE ĐỀ & KIỂU TRỘN</div>', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("", type=["docx"], label_visibility="collapsed")
+        
+        if uploaded_file:
+            st.success(f"✅ Đã tải lên: **{uploaded_file.name}**")
+        
+        st.write("")
         shuffle_mode = st.radio(
             "Chọn chế độ:",
             options=["auto", "mcq", "tf"],
@@ -707,27 +736,25 @@ def main():
                 "mcq": "📝 Trắc nghiệm (Toàn bộ)",
                 "tf": "✅ Đúng/Sai (Toàn bộ)"
             }[x],
-            index=0,
-            label_visibility="collapsed"
+            index=0
         )
 
     with col_right:
-        # 3. Cấu hình
-        st.markdown('<div class="step-header">3️⃣ CẤU HÌNH MÃ ĐỀ</div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header">2️⃣ CẤU HÌNH MÃ ĐỀ</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            num_versions = st.number_input("Số lượng đề cần tạo", min_value=1, max_value=50, value=4)
+            num_versions = st.number_input("Số lượng đề", min_value=1, max_value=50, value=4)
         with c2:
             start_code = st.number_input("Mã đề bắt đầu", min_value=0, value=101)
         
         if num_versions > 1:
-            st.info(f"📦 Sẽ tạo {num_versions} đề: {start_code} ➝ {start_code + num_versions - 1}")
+            st.info(f"📦 Tạo {num_versions} đề: {start_code} ➝ {start_code + num_versions - 1}")
         else:
-            st.info(f"📄 Sẽ tạo 1 đề: {start_code}")
+            st.info(f"📄 Tạo 1 đề: {start_code}")
 
     st.write("") 
 
-    # 4. Nút trộn đề
+    st.markdown('<div class="step-header">3️⃣ THỰC HIỆN</div>', unsafe_allow_html=True)
     if st.button("🎲 BẮT ĐẦU TRỘN ĐỀ & TẢI VỀ", type="primary", use_container_width=True):
         if not uploaded_file:
             st.warning("⚠️ Vui lòng chọn file Word trước khi trộn!")
@@ -738,7 +765,6 @@ def main():
                     base_name = re.sub(r'[^\w\s-]', '', uploaded_file.name.replace(".docx", "")).strip() or "De"
                     
                     if num_versions == 1:
-                        # Nếu 1 đề thì vẫn tạo zip để kèm đáp án
                         result = create_zip_multiple(file_bytes, base_name, 1, shuffle_mode, start_code)
                         filename = f"{base_name}_Mix_{start_code}.zip"
                     else:
@@ -754,7 +780,6 @@ def main():
             except Exception as e:
                 st.error(f"❌ Lỗi: {str(e)}")
     
-    # Footer
     st.markdown("""
     <div class="footer">
         <p>Zalo hỗ trợ kỹ thuật: <strong>038994070</strong></p>
