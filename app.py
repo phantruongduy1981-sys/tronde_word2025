@@ -586,7 +586,7 @@ def main():
                 <li><strong>Phần 1 & 2:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> ý đúng.</li>
                 <li><strong>Phần 3:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> nội dung đáp án.</li>
             </ul>
-            <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/18mgbXnT0BVOVOtm-84TcuRjeNYwm8NsD/edit?usp=sharing&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
+            <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/1A3bm_KNbl0vmnuYDfWdkqifS30RD-mLh/edit?usp=sharing&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
         </div>
         """, unsafe_allow_html=True)
     
