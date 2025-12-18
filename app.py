@@ -14,39 +14,30 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS GIAO DIỆN (ĐÃ CẬP NHẬT: SÁT LẠI & NÚT TO) ====================
+# ==================== CSS GIAO DIỆN (GIỮ NGUYÊN) ====================
 st.markdown("""
 <style>
-    /* 1. Cấu hình chung - Đẩy sát lề trên, giảm khoảng cách phần tử */
+    /* 1. Cấu hình chung */
     .block-container {
-        padding-top: 0.5rem !important; /* Sát lề trên hơn */
+        padding-top: 1rem !important;
         padding-bottom: 2rem !important;
         max-width: 98% !important;
     }
-    
-    /* QUAN TRỌNG: Giảm khoảng cách giữa các khối (thẻ) xuống mức tối thiểu */
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0.2rem !important; /* Khoảng cách rất nhỏ */
+        gap: 0.5rem !important;
     }
-    
-    /* Ẩn bớt các khoảng trắng mặc định của Streamlit */
-    .stElementContainer {
-        margin-bottom: 0px !important;
-    }
-
-    /* 2. Header Card */
     .header-card {
         background: linear-gradient(180deg, #ffffff 0%, #d1fae5 100%);
         border: 1px solid #a7f3d0;
         border-radius: 15px;
-        padding: 5px 5px; /* Giảm padding */
+        padding: 10px 5px;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 5px !important; /* Cách phần dưới ít thôi */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
     }
     .header-card h1 {
         color: #d93025; 
-        font-size: clamp(1.8rem, 3.5vw, 3.5rem) !important; 
+        font-size: clamp(2rem, 3.5vw, 3.5rem) !important; 
         white-space: nowrap !important;
         font-weight: 900;
         text-transform: uppercase;
@@ -56,88 +47,69 @@ st.markdown("""
     }
     .header-card h2 {
         color: #0d9488;
-        font-size: 1.5rem !important;
+        font-size: 1.6rem !important;
         font-weight: bold;
         margin: 0 !important;
-        padding-top: 0px !important;
+        padding-top: 2px !important;
     }
-
-    /* 3. Step Header - Gọn gàng */
     .step-header {
         color: #0d9488;
-        font-size: 1.3rem;
+        font-size: 1.4rem;
         font-weight: 700;
-        margin-top: 5px; 
-        margin-bottom: 2px;
+        margin-bottom: 5px;
         border-left: 5px solid #0d9488;
         padding-left: 10px;
         background-color: #f0fdfa;
         border-radius: 0 5px 5px 0;
     }
-
-    /* 4. Input - Tinh chỉnh khoảng cách */
     div[data-testid="stNumberInput"] label p {
-        font-size: 1.4rem !important;
+        font-size: 1.5rem !important;
         font-weight: 900 !important;
         color: #0d9488;
-        margin-bottom: 0px;
     }
     div[data-testid="stNumberInput"] input {
-        font-size: 1.4rem !important;
+        font-size: 1.5rem !important;
         font-weight: bold;
         color: #d93025; 
-        height: 2.8rem;
-        min-height: 2.8rem;
+        height: 3rem;
     }
-    /* Radio button gọn lại */
-    div[role="radiogroup"] {
-        gap: 0px !important;
-    }
-
-    /* 5. Vùng Hướng dẫn */
     .instruction-container {
         background-color: #f0fdfa;
         border: 1px solid #99f6e4;
         border-radius: 10px;
-        padding: 10px; /* Giảm padding */
-        font-size: 1.05rem !important;
-        line-height: 1.3;
-        margin-bottom: 5px;
+        padding: 15px;
+        font-size: 1.1rem !important;
+        line-height: 1.4;
     }
-
-    /* 6. NÚT BẤM - TO & ĐẬM */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
         color: white;
         border: none;
-        padding: 1rem 1rem !important; /* Tăng padding nút */
-        font-size: 2.0rem !important; /* CHỮ RẤT TO */
-        font-weight: 900 !important; /* RẤT ĐẬM */
-        border-radius: 12px;
-        box-shadow: 0 4px 15px rgba(13, 148, 136, 0.4);
+        padding: 0.8rem 1.5rem;
+        font-size: 1.4rem !important;
+        font-weight: 800;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(13, 148, 136, 0.3);
         text-transform: uppercase;
-        margin-top: 10px !important;
-        line-height: 1.2;
+        margin-top: 15px;
     }
     .stButton > button:hover {
         background: linear-gradient(90deg, #0f766e, #0d9488);
-        transform: scale(1.02);
+        transform: scale(1.01);
     }
-
-    /* Footer */
     .footer {
         text-align: center;
         color: #64748b;
-        padding: 0.5rem 0;
+        padding: 1rem 0;
         border-top: 1px dashed #cbd5e1;
         margin-top: 1rem;
-        font-size: 1rem;
+        font-size: 1.1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC XỬ LÝ WORD (GIỮ NGUYÊN 100%) ====================
+# ==================== LOGIC XỬ LÝ WORD (CORE) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -157,25 +129,32 @@ def get_text(block):
     return "".join(texts).strip()
 
 def is_marked_correct(node):
+    """Kiểm tra gạch chân, màu đỏ, highlight"""
     u_nodes = node.getElementsByTagNameNS(W_NS, "u")
     for u in u_nodes:
         val = u.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
+    
     color_nodes = node.getElementsByTagNameNS(W_NS, "color")
     for c in color_nodes:
         val = c.getAttributeNS(W_NS, "val")
         if val and val not in ["auto", "000000"]: return True
+            
     highlight_nodes = node.getElementsByTagNameNS(W_NS, "highlight")
     for h in highlight_nodes:
         val = h.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
+    
     shd_nodes = node.getElementsByTagNameNS(W_NS, "shd")
     for s in shd_nodes:
         val = s.getAttributeNS(W_NS, "fill")
         if val and val not in ["auto", "FFFFFF", "000000"]: return True
+
     return False
 
+# --- HÀM LỌC ĐÁP ÁN P3: CẮT BỎ CÁC TỪ THỪA ---
 def extract_highlighted_text(blocks):
+    """Lấy text đáp án và làm sạch"""
     extracted_text = []
     for block in blocks:
         runs = block.getElementsByTagNameNS(W_NS, "r")
@@ -185,9 +164,13 @@ def extract_highlighted_text(blocks):
                 for t in t_nodes:
                     if t.firstChild and t.firstChild.nodeValue:
                         extracted_text.append(t.firstChild.nodeValue)
+    
     full_text = "".join(extracted_text).strip()
+    
+    # Lọc bỏ "Câu 1.", "Câu 1:", "ĐS:", "Đáp số:", "KQ:"...
     full_text = re.sub(r'^(Câu\s*\d+[\.\:]\s*)?', '', full_text, flags=re.IGNORECASE)
     full_text = re.sub(r'^(ĐS|Đáp số|Đáp án|KQ|Kết quả)[\.\:]?\s*', '', full_text, flags=re.IGNORECASE)
+    
     return full_text.strip()
 
 def style_run_blue_bold(run):
@@ -197,12 +180,14 @@ def style_run_blue_bold(run):
     else:
         rPr = doc.createElementNS(W_NS, "w:rPr")
         run.insertBefore(rPr, run.firstChild)
+    
     color_list = rPr.getElementsByTagNameNS(W_NS, "color")
     if color_list: color_el = color_list[0]
     else:
         color_el = doc.createElementNS(W_NS, "w:color")
         rPr.appendChild(color_el)
     color_el.setAttributeNS(W_NS, "w:val", "0000FF")
+    
     b_list = rPr.getElementsByTagNameNS(W_NS, "b")
     if not b_list:
         b_el = doc.createElementNS(W_NS, "w:b")
@@ -601,11 +586,9 @@ def main():
                 <li><strong>Phần 1 & 2:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> ý đúng.</li>
                 <li><strong>Phần 3:</strong> Vui lòng <b>Gạch chân</b> hoặc <b>Tô màu đỏ</b> nội dung đáp án.</li>
             </ul>
-            <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/1i1b-By6EA_HO8fWgMYG9iXZPGannmWdg/edit?usp=drive_link&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
+            <p style="margin-top: 5px;">📥 <a href="https://docs.google.com/document/d/18mgbXnT0BVOVOtm-84TcuRjeNYwm8NsD/edit?usp=sharing&ouid=112824050529887271694&rtpof=true&sd=true" target="_blank">Tải file mẫu tại đây</a></p>
         </div>
         """, unsafe_allow_html=True)
-    
-    # Không dùng st.write("") để giảm khoảng cách
     
     col_left, col_right = st.columns([1, 1], gap="large")
 
