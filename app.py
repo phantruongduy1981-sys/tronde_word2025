@@ -14,10 +14,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS GIAO DIỆN (GIỮ NGUYÊN ĐẸP & TO) ====================
+# ==================== CSS GIAO DIỆN (GIỮ NGUYÊN) ====================
 st.markdown("""
 <style>
-    /* 1. Cấu hình chung */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 2rem !important;
@@ -26,8 +25,6 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] > div {
         gap: 0.5rem !important;
     }
-
-    /* 2. Header Card - Màu Xanh Ngọc */
     .header-card {
         background: linear-gradient(180deg, #ffffff 0%, #d1fae5 100%);
         border: 1px solid #a7f3d0;
@@ -54,8 +51,6 @@ st.markdown("""
         margin: 0 !important;
         padding-top: 2px !important;
     }
-
-    /* 3. Style cho CÁC BƯỚC (Step Header) */
     .step-header {
         color: #0d9488;
         font-size: 1.4rem;
@@ -66,8 +61,6 @@ st.markdown("""
         background-color: #f0fdfa;
         border-radius: 0 5px 5px 0;
     }
-
-    /* 4. Style Số lượng đề & Mã đề (Bold + Big Size 50%) */
     div[data-testid="stNumberInput"] label p {
         font-size: 1.5rem !important;
         font-weight: 900 !important;
@@ -79,8 +72,6 @@ st.markdown("""
         color: #d93025; 
         height: 3rem;
     }
-
-    /* 5. Vùng Hướng dẫn */
     .instruction-container {
         background-color: #f0fdfa;
         border: 1px solid #99f6e4;
@@ -89,8 +80,6 @@ st.markdown("""
         font-size: 1.1rem !important;
         line-height: 1.4;
     }
-
-    /* 6. Nút bấm */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
@@ -108,8 +97,6 @@ st.markdown("""
         background: linear-gradient(90deg, #0f766e, #0d9488);
         transform: scale(1.01);
     }
-
-    /* Footer */
     .footer {
         text-align: center;
         color: #64748b;
@@ -140,29 +127,23 @@ def get_text(block):
             texts.append(t.firstChild.nodeValue)
     return "".join(texts).strip()
 
-# --- HÀM CHECK ĐÁP ÁN (GẠCH CHÂN/MÀU ĐỎ) ---
 def is_marked_correct(node):
-    """Kiểm tra xem node có được đánh dấu (đỏ/gạch chân/highlight) không"""
-    # Check underline
+    """Kiểm tra gạch chân, màu đỏ, highlight"""
     u_nodes = node.getElementsByTagNameNS(W_NS, "u")
     for u in u_nodes:
         val = u.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
     
-    # Check color
     color_nodes = node.getElementsByTagNameNS(W_NS, "color")
     for c in color_nodes:
         val = c.getAttributeNS(W_NS, "val")
-        # FF0000 (đỏ), red, hoặc các mã màu khác đen/auto
         if val and val not in ["auto", "000000"]: return True
             
-    # Check highlight
     highlight_nodes = node.getElementsByTagNameNS(W_NS, "highlight")
     for h in highlight_nodes:
         val = h.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
     
-    # Check shading
     shd_nodes = node.getElementsByTagNameNS(W_NS, "shd")
     for s in shd_nodes:
         val = s.getAttributeNS(W_NS, "fill")
@@ -170,9 +151,9 @@ def is_marked_correct(node):
 
     return False
 
-# --- HÀM TRÍCH XUẤT ĐÁP ÁN PHẦN 3 (ĐÃ SỬA LỖI LỌC SẠCH) ---
+# --- HÀM LỌC ĐÁP ÁN P3: CẮT BỎ CÁC TỪ THỪA ---
 def extract_highlighted_text(blocks):
-    """Quét text được tô màu, loại bỏ 'Câu X.', 'ĐS:', 'Đáp số'"""
+    """Lấy text đáp án và làm sạch"""
     extracted_text = []
     for block in blocks:
         runs = block.getElementsByTagNameNS(W_NS, "r")
@@ -185,8 +166,7 @@ def extract_highlighted_text(blocks):
     
     full_text = "".join(extracted_text).strip()
     
-    # BỘ LỌC MẠNH HƠN: Loại bỏ "Câu 1.", "Câu 1:", "ĐS:", "Đáp số:", "Đáp án:"
-    # Regex: Bắt đầu dòng, có thể có "Câu X...", sau đó có thể có "ĐS/Đáp án", rồi mới đến nội dung
+    # Lọc bỏ "Câu 1.", "Câu 1:", "ĐS:", "Đáp số:", "KQ:"...
     full_text = re.sub(r'^(Câu\s*\d+[\.\:]\s*)?', '', full_text, flags=re.IGNORECASE)
     full_text = re.sub(r'^(ĐS|Đáp số|Đáp án|KQ|Kết quả)[\.\:]?\s*', '', full_text, flags=re.IGNORECASE)
     
@@ -225,7 +205,6 @@ def update_mcq_label(paragraph, new_label):
         t.firstChild.nodeValue = leading_space + new_letter + new_punct + after_match
         run = t.parentNode
         if run and run.localName == "r": style_run_blue_bold(run)
-        
         found_punct_in_regex = bool(m.group(3))
         if not found_punct_in_regex:
             for j in range(i + 1, len(t_nodes)):
@@ -250,7 +229,6 @@ def update_tf_label(paragraph, new_label):
         t.firstChild.nodeValue = leading_space + new_letter + new_punct + after_match
         run = t.parentNode
         if run and run.localName == "r": style_run_blue_bold(run)
-        
         found_punct_in_regex = bool(m.group(3))
         if not found_punct_in_regex:
             for j in range(i + 1, len(t_nodes)):
@@ -309,7 +287,7 @@ def parse_questions_in_range(blocks, start, end):
         else: intro.append(part_blocks[i]); i += 1
     return intro, questions
 
-# --- TRỘN MCQ (P1) VÀ LẤY ĐÁP ÁN ---
+# --- TRỘN MCQ (P1) ---
 def shuffle_mcq_options(question_blocks):
     indices = []; correct_char = None
     for i, block in enumerate(question_blocks):
@@ -336,53 +314,52 @@ def shuffle_mcq_options(question_blocks):
     min_idx = min(indices); max_idx = max(indices)
     return question_blocks[:min_idx] + shuffled_options + question_blocks[max_idx + 1:], correct_char
 
-# --- TRỘN TRUE/FALSE (P2) ĐÃ SỬA LỖI ---
+# --- TRỘN TRUE/FALSE (P2) - SỬA LỖI ĐÁP ÁN CHÍNH XÁC ---
 def shuffle_tf_options(question_blocks):
-    """
-    Thuật toán mới: Gắn status (Đ/S) vào từng item a,b,c,d rồi mới trộn.
-    Đảm bảo 100% chính xác.
-    """
-    option_indices = {} # {'a': index, 'b': index...}
-    
-    # 1. Tìm index
+    option_indices = {}
     for i, block in enumerate(question_blocks):
         text = get_text(block)
         m = re.match(r'^\s*([a-d])\)', text, re.IGNORECASE)
         if m: option_indices[m.group(1).lower()] = i
             
-    # 2. Tạo danh sách các object để trộn (kèm status)
-    # items = { 'a': {'block': b, 'stat': 'Đ'}, ... }
-    items = {}
-    for char, idx in option_indices.items():
-        blk = question_blocks[idx]
+    # 1. Lấy ra các item cần trộn (a, b, c) và item cố định (d)
+    abc_keys = [k for k in ['a', 'b', 'c'] if k in option_indices]
+    if len(abc_keys) < 2: return question_blocks, ""
+
+    # 2. Tạo danh sách object kèm trạng thái Đ/S
+    items_to_shuffle = []
+    for k in abc_keys:
+        blk = question_blocks[option_indices[k]]
         stat = 'Đ' if is_marked_correct(blk) else 'S'
-        items[char] = {'block': blk, 'status': stat}
+        items_to_shuffle.append({'block': blk, 'status': stat})
 
-    # 3. Tách nhóm trộn (a,b,c) và nhóm cố định (d - nếu muốn, nhưng ở đây trộn a,b,c)
-    keys_to_shuffle = [k for k in ['a', 'b', 'c'] if k in items]
-    if len(keys_to_shuffle) < 2: return question_blocks, ""
-    
-    shufflable_objs = [items[k] for k in keys_to_shuffle]
-    shuffled_objs = shuffle_array(shufflable_objs)
-    
-    # 4. Ghép lại (thêm d vào cuối nếu có)
-    final_objs = shuffled_objs.copy()
-    if 'd' in items:
-        final_objs.append(items['d'])
-        
-    # 5. Tạo chuỗi đáp án từ danh sách đã trộn
-    ans_str_parts = [obj['status'] for obj in final_objs]
-    ans_str = "-".join(ans_str_parts)
+    # 3. Trộn a, b, c
+    shuffled_items = shuffle_array(items_to_shuffle)
 
-    # 6. Tái tạo danh sách blocks (chèn block đã trộn vào vị trí cũ)
-    all_values = [v for v in option_indices.values() if v is not None]
-    min_idx = min(all_values); max_idx = max(all_values)
+    # 4. Xử lý d (cố định vị trí cuối, nhưng vẫn phải lấy trạng thái)
+    d_item = None
+    if 'd' in option_indices:
+        blk = question_blocks[option_indices['d']]
+        stat = 'Đ' if is_marked_correct(blk) else 'S'
+        d_item = {'block': blk, 'status': stat}
+
+    # 5. Tạo danh sách kết quả cuối cùng (a, b, c đã trộn + d)
+    final_ordered_items = shuffled_items.copy()
+    if d_item: final_ordered_items.append(d_item)
+
+    # 6. Tạo chuỗi đáp án từ danh sách đã sắp xếp (Ví dụ: Đ-S-S-Đ)
+    ans_parts = [item['status'] for item in final_ordered_items]
+    ans_str = "-".join(ans_parts)
+
+    # 7. Cập nhật lại blocks trong list gốc
+    # Lấy các index vị trí của a, b, c, d trong văn bản gốc để điền lần lượt
+    target_indices = sorted([v for k,v in option_indices.items() if k in ['a','b','c','d']])
     
-    # Lấy ra list block object từ final_objs
-    new_middle_blocks = [obj['block'] for obj in final_objs]
-    
-    new_blocks = question_blocks[:min_idx] + new_middle_blocks + question_blocks[max_idx + 1:]
-    
+    new_blocks = question_blocks.copy()
+    for i, target_idx in enumerate(target_indices):
+        if i < len(final_ordered_items):
+            new_blocks[target_idx] = final_ordered_items[i]['block']
+
     return new_blocks, ans_str
 
 def relabel_mcq_options(question_blocks):
