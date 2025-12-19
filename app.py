@@ -3,10 +3,10 @@ import re
 import random
 import zipfile
 import io
+import time
 from xml.dom import minidom
 
 # ==================== CẤU HÌNH TRANG ====================
-
 st.set_page_config(
     page_title="Trộn Đề Word - THPT Minh Đức",
     page_icon="🏫",
@@ -14,7 +14,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS GIAO DIỆN (GIỮ NGUYÊN) ====================
+# ==================== CẤU HÌNH TÀI KHOẢN (CỐ ĐỊNH) ====================
+# Bạn có thể thêm nhiều tài khoản khác vào đây nếu muốn
+USERS = {
+    "gvminhduc": "minhduc",
+    "admin": "123456" 
+}
+
+# ==================== CSS GIAO DIỆN (ĐẸP & KHÍT) ====================
 st.markdown("""
 <style>
     /* 1. Cấu hình chung */
@@ -26,6 +33,33 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] > div {
         gap: 0.5rem !important;
     }
+
+    /* 2. GIAO DIỆN ĐĂNG NHẬP */
+    .login-container {
+        max-width: 450px;
+        margin: 50px auto;
+        padding: 40px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        border: 1px solid #e0f2fe;
+        text-align: center;
+    }
+    .login-header {
+        color: #d93025;
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+    }
+    .login-sub {
+        color: #0d9488;
+        font-size: 1.2rem;
+        font-weight: bold;
+        margin-bottom: 30px;
+    }
+
+    /* 3. Header Card ứng dụng chính */
     .header-card {
         background: linear-gradient(180deg, #ffffff 0%, #d1fae5 100%);
         border: 1px solid #a7f3d0;
@@ -52,6 +86,8 @@ st.markdown("""
         margin: 0 !important;
         padding-top: 2px !important;
     }
+
+    /* 4. Các bước thực hiện */
     .step-header {
         color: #0d9488;
         font-size: 1.4rem;
@@ -62,6 +98,8 @@ st.markdown("""
         background-color: #f0fdfa;
         border-radius: 0 5px 5px 0;
     }
+
+    /* 5. Input to và đậm */
     div[data-testid="stNumberInput"] label p {
         font-size: 1.5rem !important;
         font-weight: 900 !important;
@@ -73,6 +111,8 @@ st.markdown("""
         color: #d93025; 
         height: 3rem;
     }
+
+    /* 6. Hướng dẫn */
     .instruction-container {
         background-color: #f0fdfa;
         border: 1px solid #99f6e4;
@@ -81,6 +121,8 @@ st.markdown("""
         font-size: 1.1rem !important;
         line-height: 1.4;
     }
+
+    /* 7. Nút bấm chính */
     .stButton > button {
         width: 100%;
         background: linear-gradient(90deg, #0d9488, #14b8a6);
@@ -98,6 +140,8 @@ st.markdown("""
         background: linear-gradient(90deg, #0f766e, #0d9488);
         transform: scale(1.01);
     }
+
+    /* Footer */
     .footer {
         text-align: center;
         color: #64748b;
@@ -109,7 +153,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== LOGIC XỬ LÝ WORD (CORE) ====================
+# ==================== LOGIC XỬ LÝ WORD (CORE - GIỮ NGUYÊN) ====================
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -129,32 +173,25 @@ def get_text(block):
     return "".join(texts).strip()
 
 def is_marked_correct(node):
-    """Kiểm tra gạch chân, màu đỏ, highlight"""
     u_nodes = node.getElementsByTagNameNS(W_NS, "u")
     for u in u_nodes:
         val = u.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
-    
     color_nodes = node.getElementsByTagNameNS(W_NS, "color")
     for c in color_nodes:
         val = c.getAttributeNS(W_NS, "val")
         if val and val not in ["auto", "000000"]: return True
-            
     highlight_nodes = node.getElementsByTagNameNS(W_NS, "highlight")
     for h in highlight_nodes:
         val = h.getAttributeNS(W_NS, "val")
         if val and val != "none": return True
-    
     shd_nodes = node.getElementsByTagNameNS(W_NS, "shd")
     for s in shd_nodes:
         val = s.getAttributeNS(W_NS, "fill")
         if val and val not in ["auto", "FFFFFF", "000000"]: return True
-
     return False
 
-# --- HÀM LỌC ĐÁP ÁN P3: CẮT BỎ CÁC TỪ THỪA ---
 def extract_highlighted_text(blocks):
-    """Lấy text đáp án và làm sạch"""
     extracted_text = []
     for block in blocks:
         runs = block.getElementsByTagNameNS(W_NS, "r")
@@ -164,13 +201,9 @@ def extract_highlighted_text(blocks):
                 for t in t_nodes:
                     if t.firstChild and t.firstChild.nodeValue:
                         extracted_text.append(t.firstChild.nodeValue)
-    
     full_text = "".join(extracted_text).strip()
-    
-    # Lọc bỏ "Câu 1.", "Câu 1:", "ĐS:", "Đáp số:", "KQ:"...
     full_text = re.sub(r'^(Câu\s*\d+[\.\:]\s*)?', '', full_text, flags=re.IGNORECASE)
     full_text = re.sub(r'^(ĐS|Đáp số|Đáp án|KQ|Kết quả)[\.\:]?\s*', '', full_text, flags=re.IGNORECASE)
-    
     return full_text.strip()
 
 def style_run_blue_bold(run):
@@ -180,14 +213,12 @@ def style_run_blue_bold(run):
     else:
         rPr = doc.createElementNS(W_NS, "w:rPr")
         run.insertBefore(rPr, run.firstChild)
-    
     color_list = rPr.getElementsByTagNameNS(W_NS, "color")
     if color_list: color_el = color_list[0]
     else:
         color_el = doc.createElementNS(W_NS, "w:color")
         rPr.appendChild(color_el)
     color_el.setAttributeNS(W_NS, "w:val", "0000FF")
-    
     b_list = rPr.getElementsByTagNameNS(W_NS, "b")
     if not b_list:
         b_el = doc.createElementNS(W_NS, "w:b")
@@ -562,8 +593,42 @@ def create_zip_multiple(file_bytes, base_name, num_versions, shuffle_mode, start
         except Exception as e: print(f"Error creating answer key: {e}")
     return zip_buffer.getvalue()
 
-# ==================== GIAO DIỆN STREAMLIT ====================
-def main():
+# ==================== TRANG ĐĂNG NHẬP & APP CONTROL ====================
+
+def login_page():
+    st.markdown("""
+    <div class="login-container">
+        <div class="login-header">HỆ THỐNG TRỘN ĐỀ THI</div>
+        <div class="login-sub">TRƯỜNG THPT MINH ĐỨC</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        with st.form("login_form"):
+            username = st.text_input("Tên đăng nhập")
+            password = st.text_input("Mật khẩu", type="password")
+            submitted = st.form_submit_button("ĐĂNG NHẬP HỆ THỐNG")
+            
+            if submitted:
+                # Kiểm tra tài khoản cố định
+                if username in USERS and USERS[username] == password:
+                    st.session_state['logged_in'] = True
+                    st.session_state['username'] = username
+                    st.success("Đăng nhập thành công!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Tên đăng nhập hoặc mật khẩu không đúng!")
+
+def main_application():
+    # Header & Nút đăng xuất
+    c1, c2 = st.columns([9,1])
+    with c2:
+        if st.button("Đăng xuất"):
+            st.session_state['logged_in'] = False
+            st.rerun()
+
     st.markdown("""
     <div class="header-card">
         <h1>TRƯỜNG TRUNG HỌC PHỔ THÔNG MINH ĐỨC</h1>
@@ -653,5 +718,13 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+# ==================== MAIN LOGIC ====================
+
 if __name__ == "__main__":
-    main()
+    if 'logged_in' not in st.session_state:
+        st.session_state['logged_in'] = False
+        
+    if not st.session_state['logged_in']:
+        login_page()
+    else:
+        main_application()
